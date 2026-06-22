@@ -35,6 +35,16 @@ catalog.json        ← 앱이 읽는 스킨 목록
   "skinId": "newchar",
   "name": "캐릭터 이름",
   "isFree": true,
+  "timer": {
+    "showBox": true,
+    "showDividers": true,
+    "buttonStyle": "default",
+    "font": {
+      "family": "monospace",
+      "color": "#1A1A1A",
+      "sizeSp": 30
+    }
+  },
   "character": {
     "stop": {
       "frames": ["idle_01.png"],
@@ -58,7 +68,9 @@ catalog.json        ← 앱이 읽는 스킨 목록
 }
 ```
 
-> `pause` 블록은 선택 사항입니다. 생략하면 `stop` 프레임으로 대체됩니다.
+> `timer` 블록과 `pause` 블록은 선택 사항입니다.
+> - `timer` 생략 시 → **노스킨** (박스/구분선/버튼 그림 없이 투명, 탭 영역만 동작)
+> - `pause` 생략 시 → `stop` 프레임으로 대체
 
 ### 3. zip 파일로 묶기
 
@@ -118,7 +130,27 @@ zip + catalog.json을 커밋 후 push합니다.
 | `skinId` | string | ✅ | catalog.json의 `skinId`와 일치해야 함 |
 | `name` | string | ✅ | 스킨 이름 |
 | `isFree` | boolean | ✅ | 무료 여부 |
+| `timer` | object | ❌ | 타이머 영역 스킨. 생략 시 노스킨(투명) |
 | `character` | object | ✅ | 캐릭터 상태별 프레임 정의 |
+
+#### timer 블록 (선택)
+
+타이머 숫자/버튼 영역의 시각 요소를 정의합니다. 블록 자체를 생략하면 **노스킨**(전부 투명, 탭 영역만 동작)이 됩니다.
+
+| 필드 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| `background` | string | `null` | 박스 배경 PNG 파일명. 지정 시 박스 영역 뒤에 깔리고 내장 박스는 끔 |
+| `showBox` | boolean | `true` | 박스 배경(테두리 포함) 표시 여부. `background`가 있으면 무시 |
+| `showDividerH` | boolean | `true` | 숫자/버튼 사이 가로선 표시 여부 |
+| `dividerHImage` | string | `null` | 가로 구분선 PNG 파일명 (지정 시 색 대신 이미지) |
+| `dividerHHeightDp` | number | `1` | 가로 구분선 높이(dp) |
+| `showDividers` | boolean | `true` | 버튼 사이 세로선 표시 여부 |
+| `dividersColor` | string | `#2B2B2B` | 세로 구분선 색 (`#RRGGBB` 또는 `#AARRGGBB`) |
+| `dividersImage` | string | `null` | 세로 구분선 PNG 파일명 (지정 시 색 대신 이미지) |
+| `dividersWidthDp` | number | `1` | 세로 구분선 폭(dp) |
+| `buttonStyle` | string | `default` | `default`(내장 기호) / `none`(투명) / `skin`(아래 `buttons` PNG 사용) |
+| `buttons` | object | `null` | `buttonStyle`이 `skin`일 때 사용. `minus`/`plus`/`play`/`pause`/`stop` PNG 파일명. 누락 심볼은 내장 기호로 대체 |
+| `font` | object | `null` | 타이머 숫자 글꼴. `family`/`color`/`sizeSp`. 생략 시 기본값(monospace/30sp) |
 
 #### character 블록
 
