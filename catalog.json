@@ -1,0 +1,18 @@
+{
+  "skins": [
+    {
+      "skinId": "potato",
+      "name": "감자",
+      "isFree": true,
+      "zipUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main/potato.zip",
+      "version": 1
+    },
+    {
+      "skinId": "pang",
+      "name": "팡",
+      "isFree": true,
+      "zipUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main/pang.zip",
+      "version": 1
+    }
+  ]
+}
