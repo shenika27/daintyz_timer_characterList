@@ -82,6 +82,41 @@ catalog.json        ← 앱이 읽는 스킨 목록
 
 > 위젯은 1초 단위로 갱신되므로 **100ms 미만은 의미 없습니다.** 200~250ms를 기준으로 잡으세요.
 
+### 예시로 보는 `frameDurationMs`
+
+**예시 1) 4장짜리 일반 달리기** — `250ms × 4장 = 1초`에 한 바퀴
+```json
+"running": {
+  "default": {
+    "frames": ["run_01.png", "run_02.png", "run_03.png", "run_04.png"],
+    "frameDurationMs": 250
+  }
+}
+```
+
+**예시 2) 6장 왕복 달리기** — 1→4까지 갔다가 3,2로 되돌아와 더 부드럽게
+```json
+"running": {
+  "default": {
+    "frames": ["run_01.png", "run_02.png", "run_03.png", "run_04.png", "run_03.png", "run_02.png"],
+    "frameDurationMs": 250
+  }
+}
+```
+
+**예시 3) 정지(1장)** — 프레임이 1장이면 값은 무시됨 (아무 값이나 OK)
+```json
+"stop": { "frames": ["idle_01.png"], "frameDurationMs": 1000 }
+```
+
+**예시 4) 완료 포즈** — 느긋하게 반복하려고 `500ms`로 길게
+```json
+"complete": { "frames": ["win_01.png", "win_02.png"], "frameDurationMs": 500 }
+```
+
+> **재생 시간 계산:** `frameDurationMs × 프레임 수` = 한 사이클 길이.
+> 예) 200ms × 4장 = 0.8초 / 250ms × 6장 = 1.5초. 이 사이클이 계속 반복됩니다.
+
 ## 4. 파일명 규칙
 
 - 소문자 + 언더스코어 + 2자리 번호: `run_01.png`, `win_02.png`
