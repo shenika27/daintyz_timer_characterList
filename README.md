@@ -95,6 +95,49 @@ zip + catalog.json을 커밋 후 push합니다.
 
 ---
 
+## JSON 필드 설명
+
+### catalog.json
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `skinId` | string | 스킨 고유 ID. 영소문자+언더스코어만 사용 (예: `space_cat`) |
+| `name` | string | 앱 스킨 선택 화면에 표시될 이름 |
+| `isFree` | boolean | `true`: 무료 / `false`: 유료 (잠금 표시됨) |
+| `zipUrl` | string | jsDelivr CDN 다운로드 URL |
+| `version` | number | 스킨 버전. 리소스 수정 시 값을 올려주세요 |
+
+---
+
+### skin.json (zip 내부)
+
+#### 최상위 필드
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `skinId` | string | ✅ | catalog.json의 `skinId`와 일치해야 함 |
+| `name` | string | ✅ | 스킨 이름 |
+| `isFree` | boolean | ✅ | 무료 여부 |
+| `character` | object | ✅ | 캐릭터 상태별 프레임 정의 |
+
+#### character 블록
+
+| 키 | 필수 | 설명 |
+|---|---|---|
+| `stop` | ✅ | 타이머 정지 상태 |
+| `running.default` | ✅ | 타이머 진행 중 (달리기) |
+| `pause` | ❌ | 일시정지 상태. 생략 시 `stop` 프레임으로 대체 |
+| `complete` | ✅ | 타이머 완료 상태 |
+
+#### 프레임셋 공통 필드
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `frames` | string[] | PNG 파일명 배열. 순서대로 재생됨 |
+| `frameDurationMs` | number | 프레임 1장 표시 시간 (밀리초). 예: `250` = 초당 4프레임 |
+
+---
+
 ## 참고
 
 - `skinId`는 영소문자+언더스코어만 사용 (예: `space_cat`)
