@@ -1,22 +1,39 @@
 # daintyz_timer_characterList
 
+> ℹ️ 이 README는 **CDN 배포 레포(daintyz_timer_characterList)** 의 발행 규칙 문서입니다.
+> 이 파일이 들어있는 폴더가 앱 **기본 설치 시드**(루트에 평평한 `{skinId}.zip` + 빈 `catalog.json`)라면, 구조가 아래 설명과 다를 수 있습니다 — 아래 구조는 **CDN 레포 기준**입니다.
+
 캐릭터 타이머 위젯 앱의 **스킨 배포 리포지토리**입니다.
 앱 업데이트 없이 신규 캐릭터를 추가할 수 있습니다.
 
-> 스킨 1개 = **캐릭터 + 런닝머신 배경이 합성된 한 세트**
+> 스킨(테마) 1개 = **캐릭터 + 런닝머신 배경 + 타이머 테마가 묶인 한 세트**
 > (예: "감자" → 감자 캐릭터 + 흙밭 배경 / "우주" → 우주인 + 우주 배경)
+>
+> **구매는 테마(세트) 단위**입니다. 단, 사용자는 앱에서 **캐릭터와 타이머를 따로 골라 섞어 적용**할 수 있습니다.
+> (예: 감자 캐릭터 + 우주 타이머). 그래서 테마마다 `preview/{id}/` 폴더에 **테마 썸네일 1장(`thumb.png`)·미리보기 N장(`prev01,02,…`)**을 함께 준비합니다.
 
 ---
 
 ## 리포 구조
 
 ```
-catalog.json        ← 앱이 읽는 스킨 목록
-{skinId}.zip        ← 스킨 한 세트 (skin.json + PNG들)
+catalog.json                    ← 앱이 읽는 테마 목록 (+ baseUrl)
+character_zip/{skinId}.zip      ← 테마 한 세트 (skin.json + 캐릭터·타이머 PNG들)
+preview/{skinId}/thumb.png      ← 테마 썸네일 (상점 목록 + 앱 '타이머' 탭 공용)
+preview/{skinId}/prev01.png     ← 미리보기 1장
+preview/{skinId}/prev02.png     ← 미리보기 2장
+preview/{skinId}/prev03.png …   ← 미리보기 추가 (prev01,02,03… 가변 개수)
 ```
 
-신규 캐릭터 출시 = zip + catalog.json 수정해서 **git push만** 하면 됩니다.
-10~15분 후 jsDelivr CDN에 반영되면 앱 다운로드 목록에 자동으로 나타납니다.
+- 테마별 표시 에셋(썸네일·미리보기)은 **`preview/{skinId}/` 한 폴더에 모읍니다.** 썸네일 파일명은 `thumb.png` 고정, 미리보기는 `prevNN.png`를 등록한 개수만큼.
+- zip 안 파일명/구조는 그대로(루트에 `skin.json` + PNG들). zip을 **`character_zip/` 폴더 아래**에 둡니다.
+- 썸네일·미리보기는 **zip 밖 독립 PNG** — 다운로드(구매) 전 상점 목록·상점 미리보기에서 바로 보여줘야 하므로 zip에 넣지 않습니다.
+
+신규 테마 출시 = `character_zip/` zip + 썸네일·미리보기 + `catalog.json` 수정해서 **git push만** 하면 됩니다.
+10~15분 후 jsDelivr CDN에 반영되면 앱 목록에 자동으로 나타납니다.
+
+> ⚠️ `catalog.json`은 항상 최신이 필요해 앱이 **raw.githubusercontent**에서 받고, 무거운 에셋(zip/썸네일/미리보기)은
+> catalog의 `baseUrl`(jsDelivr CDN)에서 받습니다. jsDelivr는 `@main`을 ~12시간 캐싱하니 급하면 [purge.jsdelivr.net]으로 무효화하세요.
 
 ---
 ---
@@ -54,11 +71,11 @@ catalog.json        ← 앱이 읽는 스킨 목록
 
 ```
 ✅ 올바름 (발이 항상 바닥선에 정렬)        ❌ 틀림 (프레임마다 발 높이가 다름)
-┌──────┐ ┌──────┐ ┌──────┐              ┌──────┐ ┌──────┐  ┌──────┐
-│  🏃  │ │  🏃 │ │  🏃 │              │ 🏃   │ │      │  │  🏃  │
-│      │ │      │ │      │              │      │ │  🏃  │  │      │
-│──발──│ │──발──│ │──발──│               │──발──│ │──발──│  │ 발   │
-└──────┘ └──────┘ └──────┘              └──────┘ └──────┘  └──────┘
+┌──────┐ ┌──────┐ ┌──────┐              ┌──────┐ ┌──────┐ ┌──────┐
+│  🏃   │ │  🏃   │ │  🏃   │              │ 🏃    │ │      │ │  🏃   │
+│      │ │      │ │      │              │      │ │  🏃   │ │      │
+│──발──│ │──발──│ │──발──│              │──발──│ │──발──│ │ 발   │
+└──────┘ └──────┘ └──────┘              └──────┘ └──────┘ └──────┘
 ```
 
 - **정지(idle) 프레임의 발도 달리기 최저점과 같은 바닥선**에 두세요. (안 그러면 정지일 때만 캐릭터가 떠 보임)
@@ -178,13 +195,30 @@ catalog.json        ← 앱이 읽는 스킨 목록
 
 > 어떤 그림을 그릴지는 디자인 자유고, **JSON에 어떤 파일을 연결할지는 개발자가 PART 2를 보고 설정**합니다. 디자이너는 PNG와 "이건 배경/이건 재생버튼" 정도만 알려주면 됩니다.
 
-## 5. 파일명 규칙
+## 5. 썸네일 & 미리보기 (앱 목록·상점용) ★ 테마마다 필수
+
+앱 목록과 상점에 쓸 그림을 **테마 폴더 `preview/{skinId}/` 하나에** 모아 넣습니다. 썸네일 1장(고정) + 미리보기 N장. (zip 밖 독립 PNG)
+
+| 파일 | 쓰이는 곳 | 무엇을 담나 | 권장 |
+|---|---|---|---|
+| `preview/{skinId}/thumb.png` | 상점 목록 + 앱 '타이머' 탭 썸네일 | 테마 대표 모습 (캐릭터+타이머 한 컷 권장) | 정사각 |
+| `preview/{skinId}/prev01.png` | 상점 미리보기(스와이프) 1번째 | 위젯 전체 모습 한 장 | 위젯 비율 |
+| `preview/{skinId}/prev02.png` | 상점 미리보기(스와이프) 2번째 | 위젯 전체 모습 한 장 | 위젯 비율 |
+| `preview/{skinId}/prev03.png` … | 상점 미리보기(스와이프) N번째 (선택) | 추가로 보여줄 컷 | 위젯 비율 |
+
+- **썸네일 파일명은 `thumb.png` 고정**, 미리보기는 `prev01.png`부터 **빈 번호 없이 연속**으로(prev01, prev02, prev03 …). 등록한 개수만큼 상점 미리보기 화면이 **가로 스와이프 갤러리**로 보여줍니다(앱이 prev01부터 순서대로 찾다가 없는 번호에서 멈춤).
+- 미리보기는 캐릭터+타이머가 합쳐진 **위젯 전체 모습**을 보여주면 좋습니다(사용자가 "이 테마 사면 이렇게 보이는구나"를 보는 화면). 정지/진행중 등 상황별 컷을 원하는 만큼 넣으면 됩니다.
+- ℹ️ **prevNN은 "구매 전" 상점 미리보기 전용입니다.** 구매(다운로드) 후 앱의 **적용 미리보기 화면은 앱이 zip 에셋으로 직접 라이브 렌더**하므로(상태 탭으로 정지/진행/일시정지/완료 표시), 적용 미리보기를 위해 상태별 컷을 따로 그릴 필요는 없습니다.
+- 앱 '캐릭터' 탭은 zip 안의 로컬 캐릭터 프레임을 직접 쓰므로 별도 원격 썸네일이 필요 없습니다.
+- 썸네일/미리보기가 없으면 앱은 기본 플레이스홀더로 대체하지만, **상점 매력도가 크게 떨어지니 테마마다 썸네일 1 + 미리보기 최소 1장 이상 준비**를 권장합니다.
+
+## 6. 파일명 규칙
 
 - 소문자 + 언더스코어 + 2자리 번호: `run_01.png`, `win_02.png`
 - 번호는 재생 순서. 빠지는 번호 없이 `_01`부터 연속으로.
 - 타이머 테마 파일은 역할이 드러나게: `timer_bg.png`, `btn_play.png`, `divider.png` 등.
 
-## 6. 디자이너 체크리스트
+## 7. 디자이너 체크리스트
 
 **캐릭터**
 - [ ] 모든 프레임 캔버스 크기 동일
@@ -197,6 +231,11 @@ catalog.json        ← 앱이 읽는 스킨 목록
 - [ ] 배경에 버튼 칸 구분선을 그리지 않음
 - [ ] 버튼 아이콘 투명 배경(RGBA)
 - [ ] 어두운 배경이면 숫자 글자색을 밝게 지정하도록 개발자에게 전달
+
+**썸네일 & 미리보기 (`preview/{skinId}/` 폴더에 모음)**
+- [ ] `preview/{skinId}/thumb.png` (테마 썸네일 — 상점/타이머 탭 공용, 파일명 고정)
+- [ ] `preview/{skinId}/prev01.png` (미리보기 1번째)
+- [ ] `preview/{skinId}/prev02.png` … (미리보기 추가, 필요한 만큼 prev03, prev04 …)
 
 **공통**
 - [ ] 파일명 규칙 준수
@@ -328,37 +367,46 @@ catalog.json        ← 앱이 읽는 스킨 목록
 
 # 📦 PART 3. 배포 절차
 
-### 1. zip으로 묶기
+### 1. zip으로 묶기 → `character_zip/`에 배치
+zip 안은 그대로(루트에 `skin.json` + PNG들), 파일을 `character_zip/{skinId}.zip` 위치에 둡니다.
 ```
-newchar.zip
+character_zip/newchar.zip
 ├── skin.json
 ├── idle_01.png
 ├── run_01.png ~ run_04.png
 └── win_01.png ~ win_02.png
 ```
 
-### 2. catalog.json에 항목 추가
+### 2. 썸네일·미리보기 배치 (PART 1-5 참고)
+```
+preview/newchar/thumb.png    (테마 썸네일, 파일명 고정)
+preview/newchar/prev01.png   (미리보기 1)
+preview/newchar/prev02.png   (미리보기 2, 필요시 prev03 …)
+```
+
+### 3. catalog.json에 항목 추가
+경로는 폴더 규칙대로 **자동 유추**되므로 `skinId`만 맞으면 URL을 일일이 안 적어도 됩니다. `baseUrl`만 jsDelivr로 지정하세요.
 ```json
 {
+  "baseUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main",
   "skins": [
-    {
-      "skinId": "newchar",
-      "name": "캐릭터 이름",
-      "isFree": true,
-      "zipUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main/newchar.zip",
-      "version": 1
-    }
+    { "skinId": "newchar", "name": "캐릭터 이름", "isFree": true, "hasTimer": true, "version": 1 }
   ]
 }
 ```
 
 | 필드 | 설명 |
 |---|---|
-| `skinId` | skin.json의 `skinId`와 동일 |
+| `baseUrl` | 에셋(zip/썸네일/미리보기)을 받을 jsDelivr CDN 루트. 생략 시 catalog.json이 있는 폴더로 폴백 |
+| `skinId` | skin.json의 `skinId`와 동일. 이걸로 아래 경로를 자동 유추 |
 | `name` | 앱 목록 표시 이름 |
-| `isFree` | 무료 여부 |
-| `zipUrl` | jsDelivr CDN URL (위 패턴에서 파일명만 교체) |
-| `version` | 스킨 버전. 리소스 수정 시 값을 올리면 앱이 다시 받음 |
+| `isFree` | 무료 여부 (`false`면 잠금/구매 표시) |
+| `hasTimer` | 캐릭터+타이머(true) vs 캐릭터만(false). 상점 태그용. 생략 시 true |
+| `version` | 테마 버전. 리소스 수정 시 값을 올리면 앱이 다시 받음 |
 
-### 3. git push
-zip + catalog.json 커밋 후 push → **10~15분 후** CDN 반영 → 앱 다운로드 목록에 표시.
+> **자동 유추 경로** (`{baseUrl}/` 기준): `character_zip/{skinId}.zip`, `preview/{skinId}/thumb.png`,
+> `preview/{skinId}/prev01.png`, `prev02.png` …(가변).
+> 특수한 경우만 catalog 항목에 `zipUrl`/`thumbnailUrl`/`previewStopUrl`/`previewRunningUrl`로 개별 덮어쓸 수 있습니다.
+
+### 4. git push
+`character_zip/` + 썸네일/미리보기 + `catalog.json` 커밋 후 push → **10~15분 후** CDN 반영 → 앱 목록에 표시.
