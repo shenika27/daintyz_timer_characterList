@@ -118,6 +118,41 @@
     background: #1d2329; color: #d6e0ea; border-radius: 8px; padding: 12px;
     font-size: 11.5px; white-space: pre; overflow: auto; max-height: 320px; margin: 0;
   }
+
+  /* 출시 스킨 조회 패널 */
+  body.panel-open main { margin-right: 340px; }
+  #releasedPanel {
+    position: fixed; top: 78px; right: 14px; bottom: 76px; width: 300px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-direction: column; z-index: 6; box-shadow: 0 4px 16px rgba(0,0,0,.07);
+  }
+  .rel-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .rel-head b { font-size: 14px; }
+  .rel-head .cnt { font-size: 12px; color: var(--sub); }
+  .rel-head .sp { flex: 1; }
+  .rel-head button { border: 1px solid var(--line); background: #fff; border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--sub); padding: 3px 8px; }
+  .rel-head button:hover { border-color: var(--accent); color: var(--accent); }
+  .rel-search { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .rel-search input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+  .rel-search input:focus { outline: none; border-color: var(--accent); }
+  #relList { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
+  .rel-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .rel-item:hover { background: var(--chip); }
+  .rel-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rel-badge { color: var(--accent); font-weight: 700; }
+  .rel-meta { font-size: 11.5px; color: var(--sub); margin-top: 2px; }
+  .rel-empty { padding: 18px 12px; font-size: 12.5px; color: var(--sub); text-align: center; line-height: 1.6; }
+  #relReopen {
+    position: fixed; top: 84px; right: 14px; z-index: 6; display: none;
+    border: 1px solid var(--accent); background: #fff; color: var(--accent);
+    border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  body:not(.panel-open) #releasedPanel { display: none; }
+  body:not(.panel-open) #relReopen { display: block; }
+  @media (max-width: 760px) {
+    body.panel-open main { margin-right: auto; }
+    #releasedPanel { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -137,6 +172,7 @@
       <label class="field"><span>테마 이름 (상점 표시명)</span>
         <input type="text" id="name" placeholder="팡팡 토끼" autocomplete="off"></label>
     </div>
+    <p class="hint" id="skinIdDup" style="margin:6px 0 0"></p>
     <div class="grid two" style="margin-top:12px">
       <label class="field"><span>가격 (원) — 0이면 무료</span>
         <input type="number" id="price" min="0" step="100" value="0" autocomplete="off"></label>
@@ -158,7 +194,7 @@
   <!-- 2. 캐릭터 상태 -->
   <section class="card">
     <h2>2. 캐릭터 상태별 프레임</h2>
-    <p class="hint">상태별로 이미지를 올리면 순서대로 <code>stop_01.png, stop_02.png…</code> 처럼 자동 명명됩니다. 프레임 1장이면 정지 이미지, 여러 장이면 그 간격(ms)으로 애니메이션됩니다.</p>
+    <p class="hint">상태별로 이미지를 올리면 순서대로 <code>stop_01.png, stop_02.png…</code> 처럼 자동 명명됩니다. 프레임 1장이면 정지 이미지, 여러 장이면 그 간격(ms)으로 애니메이션됩니다. <b>프레임은 투명 배경 PNG/WebP·한 변 1024px 이하</b>만 받습니다.</p>
     <div class="grid" id="stateWrap"></div>
   </section>
 
@@ -227,7 +263,7 @@
     <div class="grid">
       <div class="state-card req">
         <h3>썸네일 (thumb.png)</h3>
-        <p class="sub">상점 카드·타이머 탭에 뜨는 대표 1장.</p>
+        <p class="sub">상점 카드·타이머 탭에 뜨는 대표 1장. 정사각형 권장(아니면 경고), 한 변 1024px 이하.</p>
         <div id="asset_thumb"></div>
       </div>
       <div class="state-card">
@@ -254,6 +290,21 @@
     <div class="body"><pre class="preview-json" id="jsonPreview">기본 정보를 입력하면 여기에 표시됩니다.</pre></div>
   </details>
 </main>
+
+<aside id="releasedPanel">
+  <div class="rel-head">
+    <b>출시된 스킨</b>
+    <span class="cnt" id="relCount">…</span>
+    <span class="sp"></span>
+    <button id="relRefresh" type="button" title="catalog.json 다시 불러오기">↻</button>
+    <button id="relCollapse" type="button" title="패널 접기">✕</button>
+  </div>
+  <div class="rel-search">
+    <input type="text" id="relSearch" placeholder="skinId·테마이름 검색" autocomplete="off">
+  </div>
+  <ul id="relList"><li class="rel-empty">불러오는 중…</li></ul>
+</aside>
+<button id="relReopen" type="button" title="출시 스킨 목록 열기">📋 출시목록</button>
 
 <footer>
   <div class="status" id="status"></div>
@@ -332,10 +383,35 @@ function buildStateCards() {
   });
 }
 
-function addFrames(stateKey, fileList) {
-  [...fileList].filter(f => f.type.startsWith("image/")).forEach(f => {
-    store[stateKey].frames.push({ id: ++frameSeq, file: f, url: URL.createObjectURL(f) });
+// 최소 검증용 공통값/헬퍼
+const MAX_DIM = 1024;                              // 한 변 최대 px (위젯은 소형 — 그 이상은 용량/메모리 낭비)
+const FRAME_TYPES = ["image/png", "image/webp"];  // 캐릭터 프레임은 투명 배경 필요 → png/webp만
+
+// 이미지 픽셀 크기 읽기
+function imageSize(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload  = () => { URL.revokeObjectURL(url); resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지 로드 실패: " + file.name)); };
+    img.src = url;
   });
+}
+
+async function addFrames(stateKey, fileList) {
+  for (const f of [...fileList]) {
+    if (!f.type.startsWith("image/")) continue;
+    if (!FRAME_TYPES.includes(f.type)) {
+      alert(`'${f.name}'은(는) ${f.type || "알 수 없는 형식"}입니다.\n캐릭터 프레임은 투명 배경이 필요해 PNG(또는 WebP)만 올릴 수 있어요.`);
+      continue;
+    }
+    let sz; try { sz = await imageSize(f); } catch (e) { alert(e.message); continue; }
+    if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
+      alert(`'${f.name}'은(는) ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요(위젯은 소형이라 더 클 필요 없음).`);
+      continue;
+    }
+    store[stateKey].frames.push({ id: ++frameSeq, file: f, url: URL.createObjectURL(f) });
+  }
   renderFrames(stateKey); refresh();
 }
 
@@ -445,9 +521,16 @@ function buildThumbSlot() {
       };
     }
   }
-  input.addEventListener("change", () => {
+  input.addEventListener("change", async () => {
     const f = input.files[0]; input.value = "";
     if (!f) return;
+    let sz; try { sz = await imageSize(f); } catch (e) { alert(e.message); return; }
+    if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
+      alert(`썸네일이 ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요.`);
+      return;
+    }
+    if (sz.w !== sz.h &&
+        !confirm(`썸네일이 정사각형이 아닙니다(${sz.w}×${sz.h}).\n상점 카드·타이머 탭에서 잘려 보일 수 있어요. 그래도 사용할까요?`)) return;
     if (previewThumb) URL.revokeObjectURL(previewThumb.url);
     previewThumb = { file: f, url: URL.createObjectURL(f) };
     render(); refresh();
@@ -467,10 +550,16 @@ function buildPrevList() {
   drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addPrev(e.dataTransfer.files); });
 }
 
-function addPrev(fileList) {
-  [...fileList].filter(f => f.type.startsWith("image/")).forEach(f => {
+async function addPrev(fileList) {
+  for (const f of [...fileList]) {
+    if (!f.type.startsWith("image/")) continue;
+    let sz; try { sz = await imageSize(f); } catch (e) { alert(e.message); continue; }
+    if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
+      alert(`'${f.name}'은(는) ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요.`);
+      continue;
+    }
     previewFrames.push({ id: ++frameSeq, file: f, url: URL.createObjectURL(f) });
-  });
+  }
   renderPrev(); refresh();
 }
 
@@ -629,6 +718,8 @@ function refresh() {
     ? JSON.stringify(entry).replace(/,/g, ", ").replace(/:/g, ": ")
     : "skinId와 이름을 입력하세요.";
 
+  updateDupHint();
+
   const status = document.getElementById("status");
   const btn = document.getElementById("makeBtn");
   if (errors.length) {
@@ -701,6 +792,86 @@ async function makeZip() {
   }
 }
 
+/* ---------- 출시 스킨 조회 패널 ---------- */
+const CATALOG_URL = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main/catalog.json";
+let releasedSkins = [];
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function updateDupHint() {
+  const el = document.getElementById("skinIdDup");
+  if (!el) return;
+  const id = document.getElementById("skinId").value.trim();
+  if (!id) { el.textContent = ""; return; }
+  if (!releasedSkins.length) { el.textContent = ""; return; }
+  const hit = releasedSkins.find(s => (s.skinId || "").toLowerCase() === id.toLowerCase());
+  if (hit) {
+    el.innerHTML = `⚠ <b>${escapeHtml(hit.skinId)}</b>는 이미 출시됨("${escapeHtml(hit.name || "")}"). ` +
+      `새 스킨이면 다른 ID를, 업데이트면 그대로 두세요(기존 교체).`;
+    el.style.color = "var(--danger)";
+  } else {
+    el.textContent = "✓ 사용 가능한 새 skinId입니다.";
+    el.style.color = "var(--ok)";
+  }
+}
+
+function renderReleased() {
+  const ul = document.getElementById("relList");
+  const q = document.getElementById("relSearch").value.trim().toLowerCase();
+  const list = releasedSkins.filter(s =>
+    !q || (s.skinId || "").toLowerCase().includes(q) || (s.name || "").toLowerCase().includes(q));
+  document.getElementById("relCount").textContent = `${list.length}/${releasedSkins.length}`;
+  if (!list.length) {
+    ul.innerHTML = `<li class="rel-empty">${releasedSkins.length ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
+    return;
+  }
+  ul.innerHTML = "";
+  list.forEach(s => {
+    const free = s.isFree || !s.price || Number(s.price) <= 0;
+    const price = free ? "무료" : `${Number(s.price).toLocaleString()}원`;
+    const li = document.createElement("li");
+    li.className = "rel-item";
+    li.title = "클릭 → 이 skinId를 폼에 채움(업데이트용)";
+    li.innerHTML =
+      `<div class="rel-name">${escapeHtml(s.name || "(이름 없음)")}` +
+        `${s.prestige ? ' <span class="rel-badge">✦</span>' : ""}</div>` +
+      `<div class="rel-meta"><code>${escapeHtml(s.skinId || "?")}</code> · ${price}` +
+        `${s.version ? ` · v${s.version}` : ""}</div>`;
+    li.onclick = () => { document.getElementById("skinId").value = s.skinId; refresh(); };
+    ul.appendChild(li);
+  });
+}
+
+async function loadReleased() {
+  const ul = document.getElementById("relList");
+  ul.innerHTML = `<li class="rel-empty">불러오는 중…</li>`;
+  document.getElementById("relCount").textContent = "…";
+  try {
+    const res = await fetch(CATALOG_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
+    releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
+    renderReleased();
+    updateDupHint();
+  } catch (e) {
+    releasedSkins = [];
+    document.getElementById("relCount").textContent = "—";
+    ul.innerHTML = `<li class="rel-empty">목록을 못 불러왔어요<br>(${escapeHtml(e.message)})<br>↻ 새로고침을 눌러보세요.</li>`;
+  }
+}
+
+function setupReleasedPanel() {
+  document.body.classList.add("panel-open");
+  document.getElementById("relSearch").addEventListener("input", renderReleased);
+  document.getElementById("relRefresh").addEventListener("click", loadReleased);
+  document.getElementById("relCollapse").addEventListener("click", () => document.body.classList.remove("panel-open"));
+  document.getElementById("relReopen").addEventListener("click", () => document.body.classList.add("panel-open"));
+  loadReleased();
+}
+
 /* ---------- init ---------- */
 buildStateCards();
 buildAssetSlot("background", "타이머 배경", "image/*");
@@ -731,6 +902,7 @@ document.getElementById("copyCatalog").addEventListener("click", () => {
   });
 });
 refresh();
+setupReleasedPanel();
 </script>
 </body>
 </html>
