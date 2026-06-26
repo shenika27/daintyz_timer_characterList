@@ -1,0 +1,41 @@
+name: 스킨 번들 자동 배치
+
+# 디자이너가 GitHub 웹에서 _inbox/{skinId}.zip 을 업로드(=커밋)하면 자동 실행.
+# 번들을 풀어 character_zip/ · preview/ 배치 + catalog.json 병합 후, inbox zip을 지우고 커밋한다.
+on:
+  push:
+    paths:
+      - "_inbox/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: skin-deploy
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 번들 적용
+        run: node scripts/apply-skin-bundle.mjs
+
+      - name: 변경사항 커밋
+        run: |
+          git config user.name "skin-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add character_zip preview catalog.json _inbox
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋 생략"
+          else
+            git commit -m "chore(skin): _inbox 번들 자동 배치 + catalog 병합"
+            git push
+          fi
