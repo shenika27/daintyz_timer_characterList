@@ -127,10 +127,11 @@
   }
 
   /* 출시 스킨 조회 패널 */
-  /* 패널이 열리면 입력 컬럼을 '패널 왼쪽 영역'의 정중앙에 둔다(패널 폭 300 + 우측 여백 40 = 340 제외). */
+  /* 패널이 열려도 입력 컬럼은 '화면 중앙'을 기본으로 둔다.
+     단 패널과 겹치기 직전(우측 안전여백 372px = 패널 340 + 간격 32)까지만 우측 이동 허용. */
   body.panel-open main {
     max-width: 760px;
-    margin-left: max(16px, calc((100vw - 340px - 760px) / 2));
+    margin-left: max(16px, min(calc((100vw - 760px) / 2), calc(100vw - 1132px)));
     margin-right: auto;
   }
   #releasedPanel {
