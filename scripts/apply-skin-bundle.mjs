@@ -21,8 +21,10 @@ function log(msg) { console.log(`[apply-skin-bundle] ${msg}`); }
 
 if (!fs.existsSync(INBOX)) { log("_inbox 폴더 없음 — 처리할 것 없음."); process.exit(0); }
 
-const zips = fs.readdirSync(INBOX).filter(f => f.toLowerCase().endsWith(".zip"));
-if (zips.length === 0) { log("_inbox에 zip 없음 — 처리할 것 없음."); process.exit(0); }
+const inboxFiles = fs.readdirSync(INBOX);
+const zips = inboxFiles.filter(f => f.toLowerCase().endsWith(".zip"));
+const hasMarkers = inboxFiles.some(f => f.toLowerCase().endsWith(".delete.json"));
+if (zips.length === 0 && !hasMarkers) { log("_inbox에 처리할 zip·삭제마커 없음."); process.exit(0); }
 
 // catalog 로드 (없으면 생성)
 let catalog;
@@ -79,7 +81,32 @@ for (const zip of zips) {
   applied++;
 }
 
+// 삭제 마커(_inbox/{skinId}.delete.json) 처리: character_zip·preview·catalog에서 전체 제거.
+let deleted = 0;
+const markers = fs.readdirSync(INBOX).filter(f => f.toLowerCase().endsWith(".delete.json"));
+for (const marker of markers) {
+  const markerPath = path.join(INBOX, marker);
+  let skinId;
+  try {
+    skinId = JSON.parse(fs.readFileSync(markerPath, "utf8")).deleteSkinId;
+  } catch {
+    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
+    continue;
+  }
+  if (!skinId || !/^[A-Za-z0-9_]+$/.test(skinId)) {
+    log(`⚠ ${marker}: deleteSkinId 누락/형식오류 — 건너뜀`);
+    continue;
+  }
+  fs.rmSync(path.join(ROOT, "character_zip", `${skinId}.zip`), { force: true });
+  fs.rmSync(path.join(ROOT, "preview", skinId), { recursive: true, force: true });
+  const before = catalog.skins.length;
+  catalog.skins = catalog.skins.filter(s => s.skinId !== skinId);
+  log(`  → 삭제: ${skinId} (character_zip·preview 제거, catalog ${before}→${catalog.skins.length})`);
+  fs.rmSync(markerPath, { force: true });
+  deleted++;
+}
+
 // catalog 저장 (2-space, 트레일링 개행)
 fs.writeFileSync(CATALOG, JSON.stringify(catalog, null, 2) + "\n");
 fs.rmSync(WORK, { recursive: true, force: true });
-log(`완료: ${applied}개 번들 적용, catalog.json 갱신.`);
+log(`완료: ${applied}개 번들 적용, ${deleted}개 삭제, catalog.json 갱신.`);

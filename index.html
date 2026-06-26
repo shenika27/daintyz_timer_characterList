@@ -71,6 +71,13 @@
   .dur input { width: 90px; }
   .loopchk { margin-top: 8px; display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--sub); cursor: pointer; }
   .loopchk input { width: 15px; height: 15px; }
+  .anim-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .anim-box {
+    width: 72px; height: 72px; flex: none; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    background: repeating-conic-gradient(#eee 0% 25%, #fafafa 0% 50%) 50% / 14px 14px;
+  }
+  .anim-box img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .anim-cap { font-size: 12px; color: var(--sub); }
 
   .single-asset { display: flex; align-items: center; gap: 12px; }
   .single-asset .thumb {
@@ -120,9 +127,10 @@
   }
 
   /* 출시 스킨 조회 패널 */
-  body.panel-open main { margin-right: 340px; }
+  /* 패널이 열리면 입력 컬럼을 패널 왼쪽 영역의 가운데로(좁혀서) 보내고, 패널은 우측 여백을 더 둔다. */
+  body.panel-open main { max-width: 760px; margin-left: auto; margin-right: 380px; }
   #releasedPanel {
-    position: fixed; top: 78px; right: 14px; bottom: 76px; width: 300px;
+    position: fixed; top: 78px; right: 40px; bottom: 76px; width: 300px;
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
     display: flex; flex-direction: column; z-index: 6; box-shadow: 0 4px 16px rgba(0,0,0,.07);
   }
@@ -143,14 +151,17 @@
   .rel-meta { font-size: 11.5px; color: var(--sub); margin-top: 2px; }
   .rel-empty { padding: 18px 12px; font-size: 12.5px; color: var(--sub); text-align: center; line-height: 1.6; }
   #relReopen {
-    position: fixed; top: 84px; right: 14px; z-index: 6; display: none;
+    position: fixed; top: 84px; right: 40px; z-index: 6; display: none;
     border: 1px solid var(--accent); background: #fff; color: var(--accent);
     border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
   }
   body:not(.panel-open) #releasedPanel { display: none; }
   body:not(.panel-open) #relReopen { display: block; }
+  @media (max-width: 1180px) {
+    /* 패널을 띄울 만큼 넓지 않으면 패널은 오버레이로(본문 폭은 기본 880 유지). */
+    body.panel-open main { max-width: 880px; margin-left: auto; margin-right: auto; }
+  }
   @media (max-width: 760px) {
-    body.panel-open main { margin-right: auto; }
     #releasedPanel { display: none; }
   }
 </style>
@@ -181,8 +192,9 @@
     <div class="grid two" style="margin-top:12px">
       <label class="field"><span>부제 (상점 카드 한 줄 설명, 선택)</span>
         <input type="text" id="description" placeholder="달 위를 뛰는 토끼" autocomplete="off"></label>
-      <label class="field"><span>출시일 (NEW 배지 — 출시일+7일 이내 자동 표시)</span>
-        <input type="date" id="createdAt" autocomplete="off"></label>
+      <label class="field"><span>출시일 (생성일 자동 — NEW 배지 +7일 기준)</span>
+        <input type="text" id="createdAt" readonly tabindex="-1"
+               style="background:var(--bg);color:var(--sub);cursor:not-allowed" autocomplete="off"></label>
     </div>
     <div style="margin-top:12px">
       <label class="check"><input type="checkbox" id="prestige"> ✦ 프리스티지(희귀) 스킨</label>
@@ -203,6 +215,7 @@
       <label class="field"><span>기프트코드 (선택 — 쉼표로 여러 개)</span>
         <input type="text" id="giftCodes" placeholder="예: HOPPANG2026, FRIEND-7" autocomplete="off"></label>
       <p class="hint" style="margin:6px 0 0">입력한 코드는 <b>해시(SHA-256)로만</b> catalog에 저장됩니다(평문 미저장). 영문·숫자·<code>-</code>만, 대소문자·공백은 무시됩니다. 사용자가 설정→기프트코드에 이 코드를 입력하면 스킨이 해금돼요. <b>코드 원문은 여기 저장되지 않으니 따로 기록</b>해두세요.</p>
+      <div id="giftInherited" style="margin:6px 0 0;font-size:12.5px"></div>
     </div>
     <p class="hint" style="margin-top:8px;margin-bottom:0">가격은 <code>skin.json</code>이 아니라 <code>catalog.json</code>에 들어갑니다. zip을 만들면 아래에 catalog에 붙여넣을 줄을 함께 만들어 드려요.</p>
   </section>
@@ -312,6 +325,7 @@
     <b>출시된 스킨</b>
     <span class="cnt" id="relCount">…</span>
     <span class="sp"></span>
+    <button id="relDelete" type="button" title="skinId로 테마 전체 삭제">🗑</button>
     <button id="relRefresh" type="button" title="catalog.json 다시 불러오기">↻</button>
     <button id="relCollapse" type="button" title="패널 접기">✕</button>
   </div>
@@ -354,6 +368,9 @@ const assets = {};
 // 미리보기 저장소: thumb(단일) + prev 프레임 배열
 let previewThumb = null;            // { file, url } | null
 const previewFrames = [];           // [{ id, file, url }]
+
+// 편집 로드 시 catalog에서 가져온 기존 기프트코드 해시(원문 복구 불가). 새로 입력하지 않으면 그대로 유지.
+let inheritedGiftHashes = [];
 
 let frameSeq = 0;
 
@@ -448,6 +465,7 @@ function buildStateCards() {
       <p class="sub">${s.sub}</p>
       <div class="drop" data-state="${s.key}">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
       <ul class="frames" id="frames_${s.key}"></ul>
+      <div class="anim-row"><div class="anim-box"><img id="anim_${s.key}" alt=""></div><span class="anim-cap" id="animcap_${s.key}">프레임 없음</span></div>
       <div class="dur">프레임 간격 <input type="number" min="50" step="50" value="${s.defDur}" data-dur="${s.key}"> ms</div>
       <label class="loopchk"><input type="checkbox" data-pingpong="${s.key}"> 순환(왕복) — 01-02-03-04-03-02 식으로 되돌아오며 한 세트</label>`;
     wrap.appendChild(card);
@@ -465,12 +483,39 @@ function buildStateCards() {
       addFrames(s.key, e.dataTransfer.files);
     });
     card.querySelector("[data-dur]").addEventListener("input", e => {
-      store[s.key].dur = parseInt(e.target.value) || s.defDur; refresh();
+      store[s.key].dur = parseInt(e.target.value) || s.defDur; renderStatePreview(s.key); refresh();
     });
     card.querySelector("[data-pingpong]").addEventListener("change", e => {
-      store[s.key].pingpong = e.target.checked; refresh();
+      store[s.key].pingpong = e.target.checked; renderStatePreview(s.key); refresh();
     });
+    renderStatePreview(s.key);
   });
+}
+
+/* ---------- 상태 프레임 애니메이션 미리보기 ---------- */
+const animTimers = {};
+
+// 재생 순서 objectURL 배열(pingpong 반영) — frameSet()의 이름 확장과 동일 규칙.
+function animUrls(stateKey) {
+  let urls = store[stateKey].frames.map(fr => fr.url);
+  if (store[stateKey].pingpong && urls.length > 2) urls = urls.concat(urls.slice(1, -1).reverse());
+  return urls;
+}
+
+function renderStatePreview(stateKey) {
+  const img = document.getElementById("anim_" + stateKey);
+  const cap = document.getElementById("animcap_" + stateKey);
+  if (!img || !cap) return;
+  if (animTimers[stateKey]) { clearInterval(animTimers[stateKey]); animTimers[stateKey] = null; }
+  const urls = animUrls(stateKey);
+  if (!urls.length) { img.removeAttribute("src"); cap.textContent = "프레임 없음"; return; }
+  const dur = Math.max(50, store[stateKey].dur || 1000);
+  img.src = urls[0];
+  cap.textContent = urls.length === 1 ? "정지 이미지 (1프레임)" : `▶ ${urls.length}프레임 · ${dur}ms`;
+  if (urls.length > 1) {
+    let i = 0;
+    animTimers[stateKey] = setInterval(() => { i = (i + 1) % urls.length; img.src = urls[i]; }, dur);
+  }
 }
 
 // 최소 검증용 공통값/헬퍼
@@ -529,6 +574,7 @@ function renderFrames(stateKey) {
     };
     ul.appendChild(li);
   });
+  renderStatePreview(stateKey);
 }
 
 function move(stateKey, i, dir) {
@@ -540,6 +586,9 @@ function move(stateKey, i, dir) {
 }
 
 /* ---------- 단일 에셋 (배경/버튼/폰트) ---------- */
+// 슬롯별 render를 외부(편집 로드)에서 다시 그릴 수 있게 보관.
+const assetRenderers = {};
+
 function buildAssetSlot(slotId, label, accept) {
   const host = document.getElementById("asset_" + slotId);
   if (!host) return;
@@ -576,6 +625,7 @@ function buildAssetSlot(slotId, label, accept) {
     assets[slotId] = { slotId, file: f, url: URL.createObjectURL(f), outName: outNameFor(slotId, f) };
     render(); refresh();
   });
+  assetRenderers[slotId] = render;
   render();
 }
 
@@ -586,6 +636,8 @@ function outNameFor(slotId, file) {
 }
 
 /* ---------- 미리보기(썸네일 + prev 갤러리) ---------- */
+let thumbRender = null; // 편집 로드에서 다시 그리기 위해 보관.
+
 function buildThumbSlot() {
   const host = document.getElementById("asset_thumb");
   const input = document.createElement("input");
@@ -625,6 +677,7 @@ function buildThumbSlot() {
     previewThumb = { file: f, url: URL.createObjectURL(f) };
     render(); refresh();
   });
+  thumbRender = render;
   render();
 }
 
@@ -718,7 +771,9 @@ function buildSkinJson() {
   if (!name) errors.push("테마 이름을 입력하세요.");
   if (saleStart && saleEnd && saleEnd < saleStart) errors.push("한정구매 종료일이 시작일보다 빠릅니다.");
   giftCodes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`기프트코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
-  const giftCodeHashes = giftCodes.filter(c => /^[A-Z0-9-]+$/.test(c)).map(sha256);
+  const typedHashes = giftCodes.filter(c => /^[A-Z0-9-]+$/.test(c)).map(sha256);
+  // 새로 입력한 코드가 있으면 그것으로 교체, 없으면 편집 로드로 상속된 기존 해시를 유지.
+  const giftCodeHashes = typedHashes.length ? typedHashes : inheritedGiftHashes.slice();
 
   function frameSet(stateKey) {
     const arr = store[stateKey].frames;
@@ -820,6 +875,7 @@ function refresh() {
     : "skinId와 이름을 입력하세요.";
 
   updateDupHint();
+  updateGiftInherited();
 
   const status = document.getElementById("status");
   const btn = document.getElementById("makeBtn");
@@ -893,6 +949,181 @@ async function makeZip() {
   }
 }
 
+/* ---------- 편집 로드(기존 스킨 불러오기) + 삭제 ---------- */
+const RAW_BASE = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main";
+
+function updateGiftInherited() {
+  const el = document.getElementById("giftInherited");
+  if (!el) return;
+  if (!inheritedGiftHashes.length) { el.innerHTML = ""; return; }
+  const typed = parseGiftCodes(document.getElementById("giftCodes").value).length;
+  if (typed) {
+    el.innerHTML = `<span style="color:var(--accent)">새 코드로 교체됩니다(기존 ${inheritedGiftHashes.length}개 대체).</span>`;
+  } else {
+    el.innerHTML = `<span style="color:var(--sub)">🎁 기존 기프트코드 <b>${inheritedGiftHashes.length}개</b> 유지 중(원문 복구 불가). </span>` +
+      `<button class="pick" type="button" id="giftClearBtn" style="padding:2px 8px;font-size:12px">비우기</button>`;
+    const b = document.getElementById("giftClearBtn");
+    if (b) b.onclick = () => { inheritedGiftHashes = []; refresh(); };
+  }
+}
+
+// 현재 폼 상태 전체 초기화(편집 로드 직전에 호출).
+function resetBuilderState() {
+  STATES.forEach(s => {
+    store[s.key].frames.forEach(fr => URL.revokeObjectURL(fr.url));
+    store[s.key].frames = []; store[s.key].pingpong = false; store[s.key].dur = s.defDur;
+    const di = document.querySelector(`[data-dur="${s.key}"]`); if (di) di.value = s.defDur;
+    const pi = document.querySelector(`[data-pingpong="${s.key}"]`); if (pi) pi.checked = false;
+  });
+  Object.keys(assets).forEach(k => { if (assets[k].url) URL.revokeObjectURL(assets[k].url); delete assets[k]; });
+  if (previewThumb) { URL.revokeObjectURL(previewThumb.url); previewThumb = null; }
+  previewFrames.forEach(fr => URL.revokeObjectURL(fr.url)); previewFrames.length = 0;
+  inheritedGiftHashes = [];
+}
+
+// pingpong으로 펼쳐진 프레임 이름(fwd + reverse(fwd[1..-2]))이면 원본 forward로 되돌린다.
+function collapsePingpong(names) {
+  const n = names.length;
+  if (n >= 4 && n % 2 === 0) {
+    const f = n / 2 + 1;
+    const fwd = names.slice(0, f);
+    const expected = fwd.concat(fwd.slice(1, -1).reverse());
+    if (expected.length === n && expected.every((v, i) => v === names[i])) return { names: fwd, pingpong: true };
+  }
+  return { names, pingpong: false };
+}
+
+// zip 내부(prefix 기준) 상대경로 파일을 File 객체로.
+async function fileFromZip(zip, prefix, relName) {
+  const f = zip.files[prefix + relName];
+  if (!f) return null;
+  const blob = await f.async("blob");
+  return new File([blob], relName, { type: blob.type || "application/octet-stream" });
+}
+
+// URL에서 File 가져오기(없으면 null). 미리보기 PNG 탐침용.
+async function fileFromUrl(url, name) {
+  try {
+    const res = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new File([blob], name, { type: blob.type || "image/png" });
+  } catch { return null; }
+}
+
+// 한 상태의 frameSet(또는 null)을 store에 로드.
+async function loadFrameSetInto(zip, prefix, stateKey, frameSet) {
+  if (!frameSet || !Array.isArray(frameSet.frames) || !frameSet.frames.length) return;
+  const { names, pingpong } = collapsePingpong(frameSet.frames);
+  for (const nm of names) {
+    const file = await fileFromZip(zip, prefix, nm);
+    if (file) store[stateKey].frames.push({ id: ++frameSeq, file, url: URL.createObjectURL(file) });
+  }
+  store[stateKey].dur = frameSet.frameDurationMs || store[stateKey].dur;
+  store[stateKey].pingpong = pingpong;
+  const di = document.querySelector(`[data-dur="${stateKey}"]`); if (di) di.value = store[stateKey].dur;
+  const pi = document.querySelector(`[data-pingpong="${stateKey}"]`); if (pi) pi.checked = pingpong;
+}
+
+// 출시된 스킨(catalog 항목 entry)을 폼 전체로 불러온다(수정용). character_zip + preview를 fetch·복원.
+async function loadSkinForEdit(entry) {
+  if (!confirm(`현재 입력 내용을 버리고 '${entry.name || entry.skinId}'(${entry.skinId})을 불러옵니다.\n계속할까요?`)) return;
+
+  const status = document.getElementById("status");
+  status.textContent = `'${entry.skinId}' 불러오는 중…`;
+  try {
+    // 1) 캐릭터 zip fetch + 해제
+    const zres = await fetch(`${RAW_BASE}/character_zip/${entry.skinId}.zip?t=${Date.now()}`, { cache: "no-store" });
+    if (!zres.ok) throw new Error(`character_zip/${entry.skinId}.zip 없음 (HTTP ${zres.status})`);
+    const zip = await JSZip.loadAsync(await zres.arrayBuffer());
+    const skinJsonPath = Object.keys(zip.files).find(p => p.endsWith("skin.json"));
+    if (!skinJsonPath) throw new Error("zip 안에 skin.json이 없습니다.");
+    const prefix = skinJsonPath.slice(0, skinJsonPath.length - "skin.json".length);
+    const skinJson = JSON.parse(await zip.files[skinJsonPath].async("string"));
+
+    resetBuilderState();
+
+    // 2) 메타데이터(catalog entry 우선, 없으면 skin.json)
+    document.getElementById("skinId").value = entry.skinId || skinJson.skinId || "";
+    document.getElementById("name").value = entry.name || skinJson.name || "";
+    document.getElementById("price").value = Number(entry.price) || 0;
+    document.getElementById("prestige").checked = !!entry.prestige;
+    document.getElementById("hidden").checked = !!entry.hidden;
+    document.getElementById("saleStart").value = entry.saleStart || "";
+    document.getElementById("saleEnd").value = entry.saleEnd || "";
+    document.getElementById("description").value = entry.description || skinJson.description || "";
+    document.getElementById("createdAt").value = entry.createdAt || skinJson.createdAt || todayLocal();
+    document.getElementById("giftCodes").value = "";
+    inheritedGiftHashes = Array.isArray(entry.giftCodeHashes) ? entry.giftCodeHashes.slice() : [];
+
+    // 3) 캐릭터 프레임
+    const ch = skinJson.character || {};
+    await loadFrameSetInto(zip, prefix, "stop", ch.stop);
+    await loadFrameSetInto(zip, prefix, "running", ch.running && ch.running.default);
+    await loadFrameSetInto(zip, prefix, "complete", ch.complete);
+    if (ch.pause) await loadFrameSetInto(zip, prefix, "pause", ch.pause);
+
+    // 4) 타이머 에셋(배경/버튼/폰트)
+    const timer = skinJson.timer || {};
+    if (timer.background) {
+      const f = await fileFromZip(zip, prefix, timer.background);
+      if (f) assets.background = { slotId: "background", file: f, url: URL.createObjectURL(f), outName: timer.background };
+    }
+    if (timer.buttons) {
+      for (const b of BUTTONS) {
+        const nm = timer.buttons[b.key];
+        if (!nm) continue;
+        const f = await fileFromZip(zip, prefix, nm);
+        if (f) assets[b.key] = { slotId: b.key, file: f, url: URL.createObjectURL(f), outName: nm };
+      }
+    }
+    document.getElementById("buttonStyle").value = timer.buttonStyle || "default";
+    const font = timer.font || {};
+    if (font.file) {
+      const f = await fileFromZip(zip, prefix, font.file);
+      if (f) assets.font = { slotId: "font", file: f, url: URL.createObjectURL(f), outName: font.file };
+    }
+    document.getElementById("fontColor").value = font.color || "";
+    document.getElementById("fontSize").value = (font.sizeSp != null) ? font.sizeSp : "";
+    document.getElementById("fontFamily").value = font.family || "";
+
+    // 5) 미리보기(thumb + prevNN)
+    const thumb = await fileFromUrl(`${RAW_BASE}/preview/${entry.skinId}/thumb.png`, "thumb.png");
+    if (thumb) previewThumb = { file: thumb, url: URL.createObjectURL(thumb) };
+    for (let i = 1; i <= 30; i++) {
+      const pf = await fileFromUrl(`${RAW_BASE}/preview/${entry.skinId}/prev${pad2(i)}.png`, `prev${pad2(i)}.png`);
+      if (!pf) break; // 첫 결번에서 중단
+      previewFrames.push({ id: ++frameSeq, file: pf, url: URL.createObjectURL(pf) });
+    }
+
+    // 6) UI 전체 다시 그리기
+    STATES.forEach(s => renderFrames(s.key));
+    Object.values(assetRenderers).forEach(r => r());
+    if (thumbRender) thumbRender();
+    renderPrev();
+    refresh();
+    status.innerHTML = `✏️ <b>${entry.skinId}</b> 불러옴 — 수정 후 다시 zip을 만들어 업로드하면 갱신됩니다.`;
+  } catch (e) {
+    alert("불러오기 실패: " + e.message);
+    status.textContent = "";
+  }
+}
+
+// 테마 삭제 마커(_inbox 업로드용). Action이 character_zip/preview/catalog에서 전체 제거.
+function makeDeleteMarker() {
+  const id = (prompt("삭제할 skinId를 입력하세요(전체 삭제 — character_zip·preview·catalog에서 제거):") || "").trim();
+  if (!id) return;
+  if (!/^[A-Za-z0-9_]+$/.test(id)) { alert("skinId 형식이 올바르지 않습니다(영문/숫자/_)."); return; }
+  if (!confirm(`정말 '${id}'를 전체 삭제할까요?\n\n- character_zip/${id}.zip\n- preview/${id}/\n- catalog.json 항목\n\n(git 히스토리엔 남으므로 복구는 가능)`)) return;
+  const blob = new Blob([JSON.stringify({ deleteSkinId: id }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${id}.delete.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  alert(`'${id}.delete.json' 을 받았습니다.\n📤 _inbox에 업로드 하면 Action이 전체 삭제합니다.`);
+}
+
 /* ---------- 출시 스킨 조회 패널 ---------- */
 const CATALOG_URL = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main/catalog.json";
 let releasedSkins = [];
@@ -934,7 +1165,7 @@ function renderReleased() {
     const price = free ? "무료" : `${Number(s.price).toLocaleString()}원`;
     const li = document.createElement("li");
     li.className = "rel-item";
-    li.title = "클릭 → 이 skinId를 폼에 채움(업데이트용)";
+    li.title = "클릭 → 이 스킨을 폼으로 불러오기(수정용)";
     li.innerHTML =
       `<div class="rel-name">${escapeHtml(s.name || "(이름 없음)")}` +
         `${s.prestige ? ' <span class="rel-badge">✦</span>' : ""}` +
@@ -944,7 +1175,7 @@ function renderReleased() {
       `<div class="rel-meta"><code>${escapeHtml(s.skinId || "?")}</code> · ${price}` +
         `${s.version ? ` · v${s.version}` : ""}` +
         `${(s.saleStart || s.saleEnd) ? `<br>🕒 ${escapeHtml(s.saleStart || "~")} ~ ${escapeHtml(s.saleEnd || "~")}` : ""}</div>`;
-    li.onclick = () => { document.getElementById("skinId").value = s.skinId; refresh(); };
+    li.onclick = () => loadSkinForEdit(s);
     ul.appendChild(li);
   });
 }
@@ -972,6 +1203,7 @@ function setupReleasedPanel() {
   document.body.classList.add("panel-open");
   document.getElementById("relSearch").addEventListener("input", renderReleased);
   document.getElementById("relRefresh").addEventListener("click", loadReleased);
+  document.getElementById("relDelete").addEventListener("click", makeDeleteMarker);
   document.getElementById("relCollapse").addEventListener("click", () => document.body.classList.remove("panel-open"));
   document.getElementById("relReopen").addEventListener("click", () => document.body.classList.add("panel-open"));
   loadReleased();
@@ -985,14 +1217,15 @@ buildAssetSlot("font", "숫자 폰트(.ttf)", ".ttf,font/ttf,application/octet-s
 buildThumbSlot();
 buildPrevList();
 
-// 출시일 기본값 = 오늘(로컬 기준 yyyy-mm-dd). 새 스킨은 보통 만든 날 출시.
-(() => {
+// 오늘 날짜(로컬 yyyy-mm-dd).
+function todayLocal() {
   const d = new Date();
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  document.getElementById("createdAt").value = local;
-})();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+// 출시일은 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
+document.getElementById("createdAt").value = todayLocal();
 
-["skinId", "name", "price", "prestige", "hidden", "saleStart", "saleEnd", "giftCodes", "description", "createdAt", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
+["skinId", "name", "price", "prestige", "hidden", "saleStart", "saleEnd", "giftCodes", "description", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);
