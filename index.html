@@ -188,6 +188,22 @@
       <label class="check"><input type="checkbox" id="prestige"> ✦ 프리스티지(희귀) 스킨</label>
       <p class="hint" style="margin:4px 0 0 24px">체크 시 '업데이트 평생이용권'으로도 해금되지 않고 항상 개별구매로만 풀립니다(상점에 별도 표시).</p>
     </div>
+    <div style="margin-top:10px">
+      <label class="check"><input type="checkbox" id="hidden"> 🚫 상점에 노출 안 함(숨김)</label>
+      <p class="hint" style="margin:4px 0 0 24px">상점 목록에서 빠집니다(기프트코드·링크 전용 스킨용). 이미 보유한 사용자의 창고에는 정상 표시됩니다.</p>
+    </div>
+    <div class="grid two" style="margin-top:12px">
+      <label class="field"><span>한정구매 시작일 (선택 — 이 날짜부터 상점 노출)</span>
+        <input type="date" id="saleStart" autocomplete="off"></label>
+      <label class="field"><span>한정구매 종료일 (선택 — 당일까지 구매 가능)</span>
+        <input type="date" id="saleEnd" autocomplete="off"></label>
+    </div>
+    <p class="hint" id="saleHint" style="margin:6px 0 0">둘 다 비우면 상시 판매. 시작일 전에는 상점에 안 보이고, 종료일이 지나면 '기간만료'로 잠겨 표시됩니다(이미 보유한 사용자는 계속 사용).</p>
+    <div style="margin-top:12px">
+      <label class="field"><span>기프트코드 (선택 — 쉼표로 여러 개)</span>
+        <input type="text" id="giftCodes" placeholder="예: HOPPANG2026, FRIEND-7" autocomplete="off"></label>
+      <p class="hint" style="margin:6px 0 0">입력한 코드는 <b>해시(SHA-256)로만</b> catalog에 저장됩니다(평문 미저장). 영문·숫자·<code>-</code>만, 대소문자·공백은 무시됩니다. 사용자가 설정→기프트코드에 이 코드를 입력하면 스킨이 해금돼요. <b>코드 원문은 여기 저장되지 않으니 따로 기록</b>해두세요.</p>
+    </div>
     <p class="hint" style="margin-top:8px;margin-bottom:0">가격은 <code>skin.json</code>이 아니라 <code>catalog.json</code>에 들어갑니다. zip을 만들면 아래에 catalog에 붙여넣을 줄을 함께 만들어 드려요.</p>
   </section>
 
@@ -346,6 +362,80 @@ function extOf(name, fallback) {
   return m ? m[1].toLowerCase() : fallback;
 }
 function pad2(n) { return String(n).padStart(2, "0"); }
+
+// 기프트코드 정규화 — 앱(GiftCodeRedeemer.normalize)과 반드시 동일: 공백제거 + 대문자.
+function normalizeGift(c) { return (c || "").trim().replace(/\s+/g, "").toUpperCase(); }
+
+// "쉼표/줄바꿈" 구분 입력 → 정규화·중복제거된 코드 배열.
+function parseGiftCodes(raw) {
+  const out = [];
+  (raw || "").split(/[\n,]+/).forEach(part => {
+    const c = normalizeGift(part);
+    if (c && !out.includes(c)) out.push(c);
+  });
+  return out;
+}
+
+// 동기 SHA-256(hex). file://에서도 동작하도록 crypto.subtle 비의존(geraintluff/sha256, ASCII 전용).
+// 코드는 [A-Z0-9-]로 제한되어 ASCII == UTF-8이라 앱의 MessageDigest("SHA-256") 결과와 일치한다.
+function sha256(ascii) {
+  function rightRotate(v, a) { return (v >>> a) | (v << (32 - a)); }
+  const maxWord = Math.pow(2, 32);
+  let result = "";
+  const words = [];
+  const asciiBitLength = ascii.length * 8;
+  let hash = sha256.h = sha256.h || [];
+  const k = sha256.k = sha256.k || [];
+  let primeCounter = k.length;
+  const isComposite = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) isComposite[i] = candidate;
+      hash[primeCounter] = (Math.pow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (Math.pow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+  ascii += "\x80";
+  while (ascii.length % 64 - 56) ascii += "\x00";
+  for (let i = 0; i < ascii.length; i++) {
+    const j = ascii.charCodeAt(i);
+    if (j >> 8) return "";          // ASCII 외 문자(코드 검증에서 이미 차단됨)
+    words[i >> 2] |= j << ((3 - i) % 4) * 8;
+  }
+  words[words.length] = (asciiBitLength / maxWord) | 0;
+  words[words.length] = asciiBitLength;
+  for (let j = 0; j < words.length;) {
+    const w = words.slice(j, j += 16);
+    const oldHash = hash;
+    hash = hash.slice(0, 8);
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const a = hash[0], e = hash[4];
+      const temp1 = hash[7]
+        + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
+        + ((e & hash[5]) ^ (~e & hash[6]))
+        + k[i]
+        + (w[i] = (i < 16) ? w[i] : (
+            w[i - 16]
+            + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
+            + w[i - 7]
+            + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
+          ) | 0);
+      const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
+        + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+    }
+    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+  }
+  for (let i = 0; i < 8; i++) {
+    for (let j = 3; j + 1; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += ((b < 16) ? 0 : "") + b.toString(16);
+    }
+  }
+  return result;
+}
 
 /* ---------- 캐릭터 상태 카드 ---------- */
 function buildStateCards() {
@@ -616,12 +706,19 @@ function buildSkinJson() {
   const price = Math.max(0, parseInt(document.getElementById("price").value) || 0);
   const isFree = price <= 0; // skin.json isFree는 가격에서 도출(가격 자체는 catalog.json에만)
   const prestige = document.getElementById("prestige").checked;
+  const hidden = document.getElementById("hidden").checked;
+  const saleStart = document.getElementById("saleStart").value.trim(); // "yyyy-mm-dd" | ""
+  const saleEnd = document.getElementById("saleEnd").value.trim();
   const description = document.getElementById("description").value.trim();
   const createdAt = document.getElementById("createdAt").value.trim(); // date 인풋 → "yyyy-mm-dd"
+  const giftCodes = parseGiftCodes(document.getElementById("giftCodes").value);
   const errors = [];
 
   if (!/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("skinId는 영문/숫자/_ 만 사용하세요.");
   if (!name) errors.push("테마 이름을 입력하세요.");
+  if (saleStart && saleEnd && saleEnd < saleStart) errors.push("한정구매 종료일이 시작일보다 빠릅니다.");
+  giftCodes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`기프트코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
+  const giftCodeHashes = giftCodes.filter(c => /^[A-Z0-9-]+$/.test(c)).map(sha256);
 
   function frameSet(stateKey) {
     const arr = store[stateKey].frames;
@@ -687,15 +784,19 @@ function buildSkinJson() {
     json.timer = timer;
   }
 
-  return { json, errors, skinId, price, prestige, description, createdAt };
+  return { json, errors, skinId, price, prestige, hidden, saleStart, saleEnd, giftCodeHashes, description, createdAt };
 }
 
 // catalog.json "skins" 배열에 들어갈 항목. 번들의 catalog_entry.json + 화면 스니펫 공용.
 function buildCatalogEntry() {
-  const { json, skinId, price, prestige, description, createdAt } = buildSkinJson();
+  const { json, skinId, price, prestige, hidden, saleStart, saleEnd, giftCodeHashes, description, createdAt } = buildSkinJson();
   if (!skinId || !json.name) return null;
   return {
     skinId, name: json.name, price, prestige,
+    ...(hidden ? { hidden: true } : {}),
+    ...(saleStart ? { saleStart } : {}),
+    ...(saleEnd ? { saleEnd } : {}),
+    ...(giftCodeHashes.length ? { giftCodeHashes } : {}),
     ...(description ? { description } : {}),
     ...(createdAt ? { createdAt } : {}),
     version: 1, // Action이 갱신(기존 스킨 재업로드 시 +1)
@@ -836,9 +937,13 @@ function renderReleased() {
     li.title = "클릭 → 이 skinId를 폼에 채움(업데이트용)";
     li.innerHTML =
       `<div class="rel-name">${escapeHtml(s.name || "(이름 없음)")}` +
-        `${s.prestige ? ' <span class="rel-badge">✦</span>' : ""}</div>` +
+        `${s.prestige ? ' <span class="rel-badge">✦</span>' : ""}` +
+        `${s.hidden ? ' <span class="rel-badge" style="color:var(--sub)">🚫숨김</span>' : ""}` +
+        `${(s.saleStart || s.saleEnd) ? ' <span class="rel-badge" style="color:var(--sub)">🕒한정</span>' : ""}` +
+        `${(s.giftCodeHashes && s.giftCodeHashes.length) ? ' <span class="rel-badge" style="color:var(--sub)">🎁코드</span>' : ""}</div>` +
       `<div class="rel-meta"><code>${escapeHtml(s.skinId || "?")}</code> · ${price}` +
-        `${s.version ? ` · v${s.version}` : ""}</div>`;
+        `${s.version ? ` · v${s.version}` : ""}` +
+        `${(s.saleStart || s.saleEnd) ? `<br>🕒 ${escapeHtml(s.saleStart || "~")} ~ ${escapeHtml(s.saleEnd || "~")}` : ""}</div>`;
     li.onclick = () => { document.getElementById("skinId").value = s.skinId; refresh(); };
     ul.appendChild(li);
   });
@@ -887,7 +992,7 @@ buildPrevList();
   document.getElementById("createdAt").value = local;
 })();
 
-["skinId", "name", "price", "prestige", "description", "createdAt", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
+["skinId", "name", "price", "prestige", "hidden", "saleStart", "saleEnd", "giftCodes", "description", "createdAt", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);
