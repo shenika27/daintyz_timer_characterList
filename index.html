@@ -121,10 +121,6 @@
   .btn-upload:hover { background: #f5f7ff; }
   .errs { color: var(--danger); font-size: 12.5px; }
   code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-  .preview-json {
-    background: #1d2329; color: #d6e0ea; border-radius: 8px; padding: 12px;
-    font-size: 11.5px; white-space: pre; overflow: auto; max-height: 320px; margin: 0;
-  }
 
   /* 출시 스킨 조회 패널 */
   /* 패널이 열려도 입력 컬럼은 '화면 중앙'을 기본으로 둔다.
@@ -174,14 +170,14 @@
 <body>
 <header>
   <h1>🎨 캐릭터 타이머 스킨 빌더</h1>
-  <p>캐릭터·타이머·미리보기·catalog 정보를 모아 <b>번들 <code>{skinId}.zip</code></b> 하나로 만듭니다. 이 zip을 디자인레포 <code>_inbox/</code>에 업로드하면 GitHub Action이 자동으로 풀어 <code>character_zip/</code>·<code>preview/</code> 배치 + <code>catalog.json</code> 병합까지 해줍니다. 코드/복붙 작업 없음.</p>
+  <p>아래 항목을 채우고 <b>[zip 만들기]</b> → <b>[업로드]</b> 두 단계면 끝입니다. 나머지(배치·등록)는 자동으로 처리돼요.</p>
 </header>
 
 <main>
   <!-- 1. 기본 정보 -->
   <section class="card">
     <h2>1. 기본 정보</h2>
-    <p class="hint">skinId는 영문/숫자만. 디자인레포의 <code>character_zip/{skinId}.zip</code>, <code>catalog.json</code>의 skinId와 반드시 일치해야 합니다.</p>
+    <p class="hint">skinId는 테마의 고유 ID입니다(영문·숫자·_, 한 번 정하면 바꾸지 마세요). 기존 ID로 만들면 그 테마를 덮어씁니다(수정).</p>
     <div class="grid two">
       <label class="field"><span>skinId (예: cha07) <b style="color:var(--danger)">*</b></span>
         <input type="text" id="skinId" placeholder="cha07" autocomplete="off"></label>
@@ -203,7 +199,7 @@
     </div>
     <div style="margin-top:12px">
       <label class="check"><input type="checkbox" id="prestige"> ✦ 프리스티지(희귀) 스킨</label>
-      <p class="hint" style="margin:4px 0 0 24px">체크 시 '업데이트 평생이용권'으로도 해금되지 않고 항상 개별구매로만 풀립니다(상점에 별도 표시).</p>
+      <p class="hint" style="margin:4px 0 0 24px">개별 구매로만 풀리는 특별 테마로 표시됩니다(이용권 일괄해금 대상에서 제외).</p>
     </div>
     <div style="margin-top:10px">
       <label class="check"><input type="checkbox" id="hidden"> 🚫 상점에 노출 안 함(숨김)</label>
@@ -218,16 +214,15 @@
     <div style="margin-top:12px">
       <label class="field"><span>기프트코드 (선택 — 쉼표로 여러 개)</span>
         <input type="text" id="giftCodes" placeholder="예: HOPPANG2026, FRIEND-7" autocomplete="off"></label>
-      <p class="hint" style="margin:6px 0 0">입력한 코드는 <b>해시(SHA-256)로만</b> catalog에 저장됩니다(평문 미저장). 영문·숫자·<code>-</code>만, 대소문자·공백은 무시됩니다. 사용자가 설정→기프트코드에 이 코드를 입력하면 스킨이 해금돼요. <b>코드 원문은 여기 저장되지 않으니 따로 기록</b>해두세요.</p>
+      <p class="hint" style="margin:6px 0 0">사용자가 앱 <b>설정 → 기프트코드</b>에 이 코드를 입력하면 테마가 해금됩니다. 영문·숫자·<code>-</code>만, 대소문자·공백은 무시돼요. 코드는 안전하게 보관되며 <b>원문은 다시 볼 수 없으니 따로 기록</b>해두세요.</p>
       <div id="giftInherited" style="margin:6px 0 0;font-size:12.5px"></div>
     </div>
-    <p class="hint" style="margin-top:8px;margin-bottom:0">가격은 <code>skin.json</code>이 아니라 <code>catalog.json</code>에 들어갑니다. zip을 만들면 아래에 catalog에 붙여넣을 줄을 함께 만들어 드려요.</p>
   </section>
 
   <!-- 2. 캐릭터 상태 -->
   <section class="card">
     <h2>2. 캐릭터 상태별 프레임</h2>
-    <p class="hint">상태별로 이미지를 올리면 순서대로 <code>stop_01.png, stop_02.png…</code> 처럼 자동 명명됩니다. 프레임 1장이면 정지 이미지, 여러 장이면 그 간격(ms)으로 애니메이션됩니다. <b>프레임은 투명 배경 PNG/WebP·한 변 1024px 이하</b>만 받습니다.</p>
+    <p class="hint">한 장이면 정지 이미지, 여러 장이면 아래 간격(ms)으로 애니메이션됩니다(미리보기로 바로 확인). <b>프레임은 투명 배경 PNG/WebP, 한 변 1024px 이하</b>만 받습니다.</p>
     <div class="grid" id="stateWrap"></div>
   </section>
 
@@ -245,9 +240,9 @@
         </div>
 
         <details class="opt">
-          <summary>버튼 그림 (선택 — 올리면 buttonStyle = skin)</summary>
+          <summary>버튼 그림 (선택)</summary>
           <div class="body grid">
-            <p class="sub" style="margin:0">누락된 버튼은 앱 내장 기호로 자동 폴백됩니다. play/pause는 시작·일시정지 슬롯에서 상태에 따라 바뀝니다.</p>
+            <p class="sub" style="margin:0">올리지 않은 버튼은 앱 기본 기호로 표시됩니다. play/pause는 시작·일시정지 상태에 따라 자동으로 바뀝니다.</p>
             <div id="asset_minus"></div>
             <div id="asset_plus"></div>
             <div id="asset_play"></div>
@@ -292,7 +287,7 @@
   <!-- 4. 미리보기 이미지 -->
   <section class="card">
     <h2>4. 미리보기 이미지</h2>
-    <p class="hint">상점/타이머 탭에 쓰일 이미지입니다. <b>썸네일은 필수</b>(상점 목록·타이머 탭 공용), 미리보기는 여러 장 올리면 상세화면 갤러리에 순서대로 표시됩니다. 올린 파일은 자동으로 PNG로 변환·명명됩니다(<code>thumb.png</code>, <code>prev01.png…</code>).</p>
+    <p class="hint"><b>썸네일은 필수</b>입니다(상점 목록·타이머 탭에 뜨는 대표 이미지). 미리보기는 여러 장 올리면 상세화면 갤러리에 순서대로 표시됩니다.</p>
     <div class="grid">
       <div class="state-card req">
         <h3>썸네일 (thumb.png)</h3>
@@ -308,20 +303,6 @@
     </div>
   </section>
 
-  <!-- catalog.json 줄 -->
-  <section class="card">
-    <h2>5. catalog.json 항목 (자동 포함)</h2>
-    <p class="hint">아래 항목이 번들 안 <code>catalog_entry.json</code>으로 들어가고, Action이 <code>catalog.json</code>의 <code>"skins"</code> 배열에 자동 추가/갱신합니다. 손으로 복붙할 필요는 없어요(아래 복사 버튼은 확인·수동 보정용).</p>
-    <pre class="preview-json" id="catalogSnippet" style="max-height:none">기본 정보를 입력하세요.</pre>
-    <button class="pick" id="copyCatalog" type="button" style="margin-top:10px">📋 이 줄 복사(선택)</button>
-    <span id="copyMsg" style="margin-left:10px;font-size:12.5px;color:var(--ok)"></span>
-  </section>
-
-  <!-- 미리보기 -->
-  <details class="opt" style="background:#fff">
-    <summary>생성될 skin.json 미리보기</summary>
-    <div class="body"><pre class="preview-json" id="jsonPreview">기본 정보를 입력하면 여기에 표시됩니다.</pre></div>
-  </details>
 </main>
 
 <aside id="releasedPanel">
@@ -342,11 +323,11 @@
 
 <footer>
   <div class="status" id="status"></div>
-  <button class="btn-make" id="makeBtn">⬇ 번들 zip 만들기</button>
+  <button class="btn-make" id="makeBtn">⬇ zip 만들기</button>
   <a class="btn-upload" id="uploadLink"
      href="https://github.com/shenika27/daintyz_timer_characterList/upload/main/_inbox"
      target="_blank" rel="noopener"
-     title="새 탭에서 _inbox 업로드 페이지를 엽니다. 받은 zip을 끌어다 놓고 Commit 하세요.">📤 _inbox에 업로드</a>
+     title="새 탭에서 업로드 페이지가 열립니다. 받은 파일을 끌어다 놓고 Commit 하면 자동 처리됩니다.">📤 업로드</a>
 </footer>
 
 <script>
@@ -861,19 +842,11 @@ function buildCatalogEntry() {
 
 /* ---------- 미리보기 + 상태 ---------- */
 function refresh() {
-  const { json, errors, skinId, price, prestige, description, createdAt } = buildSkinJson();
-  document.getElementById("jsonPreview").textContent = JSON.stringify(json, null, 2);
+  const { errors, skinId, price } = buildSkinJson();
 
   // 가격 힌트
   document.getElementById("priceHint").textContent =
     price <= 0 ? "→ 무료 테마" : `→ ${price.toLocaleString()}원`;
-
-  // catalog.json 항목 (번들에 자동 포함)
-  const snip = document.getElementById("catalogSnippet");
-  const entry = buildCatalogEntry();
-  snip.textContent = entry
-    ? JSON.stringify(entry).replace(/,/g, ", ").replace(/:/g, ": ")
-    : "skinId와 이름을 입력하세요.";
 
   updateDupHint();
   updateGiftInherited();
@@ -942,11 +915,11 @@ async function makeZip() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     document.getElementById("status").innerHTML =
-      `✅ <b>${skinId}.zip</b> 받음 → <b>📤 _inbox에 업로드</b> 눌러 끌어다 놓으세요.`;
+      `✅ <b>${skinId}.zip</b> 저장됨 → <b>📤 업로드</b>를 눌러 끌어다 놓으세요.`;
   } catch (e) {
-    alert("번들 생성 중 오류: " + e.message);
+    alert("zip 생성 중 오류: " + e.message);
   } finally {
-    btn.textContent = "⬇ 번들 zip 만들기"; btn.disabled = false;
+    btn.textContent = "⬇ zip 만들기"; btn.disabled = false;
   }
 }
 
@@ -1111,17 +1084,17 @@ async function loadSkinForEdit(entry) {
 
 // 테마 삭제 마커(_inbox 업로드용). Action이 character_zip/preview/catalog에서 전체 제거.
 function makeDeleteMarker() {
-  const id = (prompt("삭제할 skinId를 입력하세요(전체 삭제 — character_zip·preview·catalog에서 제거):") || "").trim();
+  const id = (prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):") || "").trim();
   if (!id) return;
   if (!/^[A-Za-z0-9_]+$/.test(id)) { alert("skinId 형식이 올바르지 않습니다(영문/숫자/_)."); return; }
-  if (!confirm(`정말 '${id}'를 전체 삭제할까요?\n\n- character_zip/${id}.zip\n- preview/${id}/\n- catalog.json 항목\n\n(git 히스토리엔 남으므로 복구는 가능)`)) return;
+  if (!confirm(`정말 '${id}' 테마를 삭제할까요?\n상점·창고·미리보기에서 모두 제거됩니다.\n(기록은 남아 있어 복구는 가능합니다.)`)) return;
   const blob = new Blob([JSON.stringify({ deleteSkinId: id }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${id}.delete.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  alert(`'${id}.delete.json' 을 받았습니다.\n📤 _inbox에 업로드 하면 Action이 전체 삭제합니다.`);
+  alert(`삭제 파일 '${id}.delete.json' 을 저장했습니다.\n📤 업로드 하면 자동으로 삭제됩니다.`);
 }
 
 /* ---------- 출시 스킨 조회 패널 ---------- */
@@ -1238,14 +1211,6 @@ document.getElementById("createdAt").value = todayLocal();
   el.addEventListener("change", refresh);
 });
 document.getElementById("makeBtn").addEventListener("click", makeZip);
-document.getElementById("copyCatalog").addEventListener("click", () => {
-  const txt = document.getElementById("catalogSnippet").textContent;
-  navigator.clipboard.writeText(txt).then(() => {
-    const msg = document.getElementById("copyMsg");
-    msg.textContent = "복사됨!";
-    setTimeout(() => msg.textContent = "", 1500);
-  });
-});
 refresh();
 setupReleasedPanel();
 </script>
