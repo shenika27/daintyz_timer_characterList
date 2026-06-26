@@ -1,11 +1,11 @@
 // _inbox/*.zip (스킨빌더 번들)을 풀어서 디자인레포에 배치하고 catalog.json을 병합한다.
 //
 // 번들 구조(스킨빌더 = 이 레포 최상위 index.html 출력):
-//   character_zip/{skinId}.zip
-//   preview/{skinId}/thumb.png, prev01.png …
+//   character/zip/{skinId}.zip
+//   character/preview/{skinId}/thumb.png, prev01.png …
 //   catalog_entry.json   ← catalog.json "skins"에 upsert 할 항목
 //
-// 동작: 번들을 레포 레이아웃 그대로 펼치고(character_zip/ · preview/), catalog만 병합.
+// 동작: 번들을 레포 레이아웃 그대로 펼치고(character/ 하위 zip·preview), catalog만 병합.
 // unzip(ubuntu-latest 기본 제공) 외 외부 의존성 없음.
 
 import { execFileSync } from "node:child_process";
@@ -45,8 +45,8 @@ for (const zip of zips) {
   log(`풀기: _inbox/${zip}`);
   execFileSync("unzip", ["-o", "-q", zipPath, "-d", tmp], { stdio: "inherit" });
 
-  // 1) character_zip/, preview/ 를 레포 루트로 오버레이
-  for (const sub of ["character_zip", "preview"]) {
+  // 1) character/(zip·preview) 를 레포 루트로 오버레이
+  for (const sub of ["character"]) {
     const src = path.join(tmp, sub);
     if (fs.existsSync(src)) {
       fs.cpSync(src, path.join(ROOT, sub), { recursive: true });
@@ -81,7 +81,7 @@ for (const zip of zips) {
   applied++;
 }
 
-// 삭제 마커(_inbox/{skinId}.delete.json) 처리: character_zip·preview·catalog에서 전체 제거.
+// 삭제 마커(_inbox/{skinId}.delete.json) 처리: character/zip·character/preview·catalog에서 전체 제거.
 let deleted = 0;
 const markers = fs.readdirSync(INBOX).filter(f => f.toLowerCase().endsWith(".delete.json"));
 for (const marker of markers) {
@@ -97,11 +97,11 @@ for (const marker of markers) {
     log(`⚠ ${marker}: deleteSkinId 누락/형식오류 — 건너뜀`);
     continue;
   }
-  fs.rmSync(path.join(ROOT, "character_zip", `${skinId}.zip`), { force: true });
-  fs.rmSync(path.join(ROOT, "preview", skinId), { recursive: true, force: true });
+  fs.rmSync(path.join(ROOT, "character", "zip", `${skinId}.zip`), { force: true });
+  fs.rmSync(path.join(ROOT, "character", "preview", skinId), { recursive: true, force: true });
   const before = catalog.skins.length;
   catalog.skins = catalog.skins.filter(s => s.skinId !== skinId);
-  log(`  → 삭제: ${skinId} (character_zip·preview 제거, catalog ${before}→${catalog.skins.length})`);
+  log(`  → 삭제: ${skinId} (character/zip·preview 제거, catalog ${before}→${catalog.skins.length})`);
   fs.rmSync(markerPath, { force: true });
   deleted++;
 }

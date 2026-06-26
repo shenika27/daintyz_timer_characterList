@@ -880,9 +880,9 @@ async function buildCharacterZipBlob(json, skinId) {
 
 /* ---------- 번들 zip 생성 (디자인레포 _inbox/ 업로드용) ----------
    구조 = 디자인레포 레이아웃 오버레이:
-     character_zip/{skinId}.zip   ← 위 캐릭터 zip 그대로
-     preview/{skinId}/thumb.png
-     preview/{skinId}/prev01.png …
+     character/zip/{skinId}.zip   ← 위 캐릭터 zip 그대로
+     character/preview/{skinId}/thumb.png
+     character/preview/{skinId}/prev01.png …
      catalog_entry.json           ← catalog.json "skins"에 병합할 항목
    Action(apply-skin-bundle)이 이 구조를 그대로 레포에 펼치고 catalog만 병합한다. */
 async function makeZip() {
@@ -896,10 +896,10 @@ async function makeZip() {
 
     // 1) 캐릭터 zip 중첩
     const charBlob = await buildCharacterZipBlob(json, skinId);
-    bundle.file(`character_zip/${skinId}.zip`, charBlob);
+    bundle.file(`character/zip/${skinId}.zip`, charBlob);
 
     // 2) 미리보기 (PNG로 재인코딩)
-    const prevDir = bundle.folder(`preview/${skinId}`);
+    const prevDir = bundle.folder(`character/preview/${skinId}`);
     prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
     for (let i = 0; i < previewFrames.length; i++) {
       prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
@@ -999,7 +999,7 @@ async function loadFrameSetInto(zip, prefix, stateKey, frameSet) {
   const pi = document.querySelector(`[data-pingpong="${stateKey}"]`); if (pi) pi.checked = pingpong;
 }
 
-// 출시된 스킨(catalog 항목 entry)을 폼 전체로 불러온다(수정용). character_zip + preview를 fetch·복원.
+// 출시된 스킨(catalog 항목 entry)을 폼 전체로 불러온다(수정용). character/zip + character/preview를 fetch·복원.
 async function loadSkinForEdit(entry) {
   if (!confirm(`현재 입력 내용을 버리고 '${entry.name || entry.skinId}'(${entry.skinId})을 불러옵니다.\n계속할까요?`)) return;
 
@@ -1007,8 +1007,8 @@ async function loadSkinForEdit(entry) {
   status.textContent = `'${entry.skinId}' 불러오는 중…`;
   try {
     // 1) 캐릭터 zip fetch + 해제
-    const zres = await fetch(`${RAW_BASE}/character_zip/${entry.skinId}.zip?t=${Date.now()}`, { cache: "no-store" });
-    if (!zres.ok) throw new Error(`character_zip/${entry.skinId}.zip 없음 (HTTP ${zres.status})`);
+    const zres = await fetch(`${RAW_BASE}/character/zip/${entry.skinId}.zip?t=${Date.now()}`, { cache: "no-store" });
+    if (!zres.ok) throw new Error(`character/zip/${entry.skinId}.zip 없음 (HTTP ${zres.status})`);
     const zip = await JSZip.loadAsync(await zres.arrayBuffer());
     const skinJsonPath = Object.keys(zip.files).find(p => p.endsWith("skin.json"));
     if (!skinJsonPath) throw new Error("zip 안에 skin.json이 없습니다.");
@@ -1061,10 +1061,10 @@ async function loadSkinForEdit(entry) {
     document.getElementById("fontFamily").value = font.family || "";
 
     // 5) 미리보기(thumb + prevNN)
-    const thumb = await fileFromUrl(`${RAW_BASE}/preview/${entry.skinId}/thumb.png`, "thumb.png");
+    const thumb = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/thumb.png`, "thumb.png");
     if (thumb) previewThumb = { file: thumb, url: URL.createObjectURL(thumb) };
     for (let i = 1; i <= 30; i++) {
-      const pf = await fileFromUrl(`${RAW_BASE}/preview/${entry.skinId}/prev${pad2(i)}.png`, `prev${pad2(i)}.png`);
+      const pf = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/prev${pad2(i)}.png`, `prev${pad2(i)}.png`);
       if (!pf) break; // 첫 결번에서 중단
       previewFrames.push({ id: ++frameSeq, file: pf, url: URL.createObjectURL(pf) });
     }
@@ -1082,7 +1082,7 @@ async function loadSkinForEdit(entry) {
   }
 }
 
-// 테마 삭제 마커(_inbox 업로드용). Action이 character_zip/preview/catalog에서 전체 제거.
+// 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
 function makeDeleteMarker() {
   const id = (prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):") || "").trim();
   if (!id) return;
