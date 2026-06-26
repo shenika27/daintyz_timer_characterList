@@ -106,6 +106,12 @@
   }
   .btn-make:hover { background: var(--accent-d); }
   .btn-make:disabled { background: #b9c0cc; cursor: not-allowed; }
+  .btn-upload {
+    border: 1px solid var(--accent); color: var(--accent); background: #fff;
+    border-radius: 9px; padding: 11px 18px; font-size: 14px; font-weight: 700;
+    cursor: pointer; text-decoration: none;
+  }
+  .btn-upload:hover { background: #f5f7ff; }
   .errs { color: var(--danger); font-size: 12.5px; }
   code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
   .preview-json {
@@ -252,6 +258,10 @@
 <footer>
   <div class="status" id="status"></div>
   <button class="btn-make" id="makeBtn">⬇ 번들 zip 만들기</button>
+  <a class="btn-upload" id="uploadLink"
+     href="https://github.com/shenika27/daintyz_timer_characterList/upload/main/_inbox"
+     target="_blank" rel="noopener"
+     title="새 탭에서 _inbox 업로드 페이지를 엽니다. 받은 zip을 끌어다 놓고 Commit 하세요.">📤 _inbox에 업로드</a>
 </footer>
 
 <script>
@@ -682,6 +692,8 @@ async function makeZip() {
     a.download = `${skinId}.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    document.getElementById("status").innerHTML =
+      `✅ <b>${skinId}.zip</b> 받음 → <b>📤 _inbox에 업로드</b> 눌러 끌어다 놓으세요.`;
   } catch (e) {
     alert("번들 생성 중 오류: " + e.message);
   } finally {
