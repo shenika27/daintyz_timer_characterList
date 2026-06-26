@@ -1,6 +1,6 @@
 // _inbox/*.zip (스킨빌더 번들)을 풀어서 디자인레포에 배치하고 catalog.json을 병합한다.
 //
-// 번들 구조(스킨빌더 tools/skin-builder/index.html 출력):
+// 번들 구조(스킨빌더 = 이 레포 최상위 index.html 출력):
 //   character_zip/{skinId}.zip
 //   preview/{skinId}/thumb.png, prev01.png …
 //   catalog_entry.json   ← catalog.json "skins"에 upsert 할 항목
