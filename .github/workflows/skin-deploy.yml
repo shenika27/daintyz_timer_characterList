@@ -28,10 +28,47 @@ jobs:
       - name: 번들 적용
         run: node scripts/apply-skin-bundle.mjs
 
+      # 유료 스킨 zip은 공개 레포가 아니라 비공개 R2(daintyz-skins)에 올린다.
+      # apply 스크립트가 _r2_upload/{skinId}.zip(올릴 것)과 _r2_delete.txt(지울 키)를 만든다.
+      # 무료 전용 번들이면 둘 다 비어 있어 통째로 건너뛴다 → 토큰 없이도 무료 파이프라인 정상 동작.
+      # 유료가 있는데 토큰이 없으면 여기서 실패 → 아래 커밋 스텝이 실행되지 않아
+      # "catalog엔 유료 스킨이 보이는데 R2엔 zip이 없는" 깨진 상태를 방지한다.
+      - name: R2 업로드/삭제 (유료 스킨)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          uploads=(_r2_upload/*.zip)
+          has_delete=false
+          if [ -s _r2_delete.txt ]; then has_delete=true; fi
+          if [ ${#uploads[@]} -eq 0 ] && [ "$has_delete" = false ]; then
+            echo "R2 작업 없음(무료 전용) — 건너뜀"
+            exit 0
+          fi
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::error::유료 스킨이 있으나 CLOUDFLARE_API_TOKEN 시크릿이 없습니다. R2 업로드 불가 — 중단합니다."
+            exit 1
+          fi
+          for f in "${uploads[@]}"; do
+            key="$(basename "$f")"
+            echo "R2 업로드: daintyz-skins/$key"
+            npx -y wrangler@3 r2 object put "daintyz-skins/$key" --file "$f" --remote
+          done
+          if [ "$has_delete" = true ]; then
+            while IFS= read -r key; do
+              [ -n "$key" ] || continue
+              echo "R2 삭제: daintyz-skins/$key"
+              npx -y wrangler@3 r2 object delete "daintyz-skins/$key" --remote || true
+            done < _r2_delete.txt
+          fi
+
       - name: 변경사항 커밋
         run: |
           git config user.name "skin-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # _r2_upload·_r2_delete.txt 는 .gitignore 대상 — 절대 add 하지 않는다(유료 원본 유출 방지).
           git add character catalog.json _inbox
           if git diff --cached --quiet; then
             echo "변경 없음 — 커밋 생략"

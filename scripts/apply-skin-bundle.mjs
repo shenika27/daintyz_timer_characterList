@@ -16,8 +16,20 @@ const ROOT = process.cwd();
 const INBOX = path.join(ROOT, "_inbox");
 const CATALOG = path.join(ROOT, "catalog.json");
 const WORK = path.join(ROOT, "_inbox_work");
+// 유료 zip 스테이징/삭제 매니페스트(둘 다 .gitignore 대상 — 절대 공개 커밋 금지).
+// 워크플로우의 R2 스텝이 이 둘을 읽어 업로드/삭제한 뒤 catalog를 커밋한다.
+const R2_UPLOAD = path.join(ROOT, "_r2_upload");      // {skinId}.zip 들을 R2로 올림
+const R2_DELETE = path.join(ROOT, "_r2_delete.txt");  // R2에서 지울 키({skinId}.zip) 한 줄씩
 
 function log(msg) { console.log(`[apply-skin-bundle] ${msg}`); }
+
+/** catalog 항목이 유료인지(price>0). */
+function isPaidEntry(e) { return e && Number(e.price) > 0; }
+
+/** R2 삭제 매니페스트에 키를 한 줄 추가(중복 무방, 워크플로우가 || true로 관대 처리). */
+function queueR2Delete(skinId) {
+  fs.appendFileSync(R2_DELETE, `${skinId}.zip\n`);
+}
 
 if (!fs.existsSync(INBOX)) { log("_inbox 폴더 없음 — 처리할 것 없음."); process.exit(0); }
 
@@ -36,6 +48,9 @@ try {
 if (!Array.isArray(catalog.skins)) catalog.skins = [];
 
 fs.rmSync(WORK, { recursive: true, force: true });
+// R2 스테이징/매니페스트는 매 실행 새로 시작(이전 실행 잔여물이 섞이면 안 됨).
+fs.rmSync(R2_UPLOAD, { recursive: true, force: true });
+fs.rmSync(R2_DELETE, { force: true });
 let applied = 0;
 
 for (const zip of zips) {
@@ -45,25 +60,52 @@ for (const zip of zips) {
   log(`풀기: _inbox/${zip}`);
   execFileSync("unzip", ["-o", "-q", zipPath, "-d", tmp], { stdio: "inherit" });
 
-  // 1) character/(zip·preview) 를 레포 루트로 오버레이
-  for (const sub of ["character"]) {
-    const src = path.join(tmp, sub);
-    if (fs.existsSync(src)) {
-      fs.cpSync(src, path.join(ROOT, sub), { recursive: true });
-      log(`  → ${sub}/ 배치 완료`);
-    } else {
-      log(`  ⚠ 번들에 ${sub}/ 없음 (건너뜀)`);
-    }
-  }
-
-  // 2) catalog 병합 (skinId 기준 upsert; 기존이면 version +1)
+  // 1) catalog 항목 먼저 읽어 유료/무료를 판정한다(배치 방식이 갈리므로).
   const entryPath = path.join(tmp, "catalog_entry.json");
   if (!fs.existsSync(entryPath)) {
     throw new Error(`${zip}: catalog_entry.json 이 없습니다. 스킨빌더로 만든 번들인지 확인하세요.`);
   }
   const entry = JSON.parse(fs.readFileSync(entryPath, "utf8"));
   if (!entry.skinId) throw new Error(`${zip}: catalog_entry.json 에 skinId가 없습니다.`);
+  const skinId = entry.skinId;
+  const paid = isPaidEntry(entry);
+  if (paid && !entry.productId) {
+    // 빌더가 유료엔 productId를 반드시 넣는다. 없으면 손상된 번들 → 멈춤(보호 깨짐 방지).
+    throw new Error(`${zip}: 유료(price=${entry.price})인데 productId가 없습니다. 스킨빌더로 다시 만드세요.`);
+  }
 
+  // 2) preview는 무료/유료 공통으로 공개 배치(상점 썸네일·미리보기).
+  const previewSrc = path.join(tmp, "character", "preview", skinId);
+  if (fs.existsSync(previewSrc)) {
+    const previewDst = path.join(ROOT, "character", "preview", skinId);
+    fs.cpSync(previewSrc, previewDst, { recursive: true });
+    log(`  → character/preview/${skinId} 배치`);
+  } else {
+    log(`  ⚠ 번들에 character/preview/${skinId} 없음 (건너뜀)`);
+  }
+
+  // 3) 캐릭터 zip: 무료=공개(character/zip), 유료=_r2_upload 스테이징(공개 금지) + 기존 공개본 제거.
+  const zipSrc = path.join(tmp, "character", "zip", `${skinId}.zip`);
+  if (!fs.existsSync(zipSrc)) {
+    throw new Error(`${zip}: 번들에 character/zip/${skinId}.zip 이 없습니다.`);
+  }
+  const publicZip = path.join(ROOT, "character", "zip", `${skinId}.zip`);
+  if (paid) {
+    fs.mkdirSync(R2_UPLOAD, { recursive: true });
+    fs.copyFileSync(zipSrc, path.join(R2_UPLOAD, `${skinId}.zip`));
+    // 무료였다가 유료로 바뀐 경우/테스트 잔여물: 공개 zip이 남아 있으면 보호가 깨지므로 삭제.
+    if (fs.existsSync(publicZip)) {
+      fs.rmSync(publicZip, { force: true });
+      log(`  → (유료 전환) 공개 character/zip/${skinId}.zip 제거`);
+    }
+    log(`  → 유료: _r2_upload/${skinId}.zip 스테이징 (공개 커밋 안 함)`);
+  } else {
+    fs.mkdirSync(path.dirname(publicZip), { recursive: true });
+    fs.copyFileSync(zipSrc, publicZip);
+    log(`  → 무료: character/zip/${skinId}.zip 공개 배치`);
+  }
+
+  // 4) catalog 병합 (skinId 기준 upsert; 기존이면 version +1)
   const idx = catalog.skins.findIndex(s => s.skinId === entry.skinId);
   if (idx >= 0) {
     const prevVer = Number(catalog.skins[idx].version) || 1;
@@ -76,7 +118,7 @@ for (const zip of zips) {
     log(`  → catalog 신규: ${entry.skinId} (version ${entry.version})`);
   }
 
-  // 3) 처리한 inbox zip 제거
+  // 5) 처리한 inbox zip 제거
   fs.rmSync(zipPath, { force: true });
   applied++;
 }
@@ -96,6 +138,12 @@ for (const marker of markers) {
   if (!skinId || !/^[A-Za-z0-9_]+$/.test(skinId)) {
     log(`⚠ ${marker}: deleteSkinId 누락/형식오류 — 건너뜀`);
     continue;
+  }
+  // 유료였던 스킨은 zip이 공개 레포가 아니라 R2에 있다 → R2 삭제 큐에 올린다(공개본 제거는 무해한 no-op).
+  const existing = catalog.skins.find(s => s.skinId === skinId);
+  if (isPaidEntry(existing)) {
+    queueR2Delete(skinId);
+    log(`  → (유료) R2 삭제 예약: ${skinId}.zip`);
   }
   fs.rmSync(path.join(ROOT, "character", "zip", `${skinId}.zip`), { force: true });
   fs.rmSync(path.join(ROOT, "character", "preview", skinId), { recursive: true, force: true });
