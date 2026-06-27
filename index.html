@@ -831,6 +831,9 @@ function buildCatalogEntry() {
   if (!skinId || !json.name) return null;
   return {
     skinId, name: json.name, price, prestige,
+    // 유료 스킨은 Play 인앱상품 ID(SKU)가 필요하다. skinId에서 결정적으로 파생(소문자+접두사)해
+    // 빠뜨릴 여지를 없앤다. Play Console에는 이 ID 그대로 등록해야 한다. 무료는 SKU 불필요.
+    ...(price > 0 ? { productId: `skin_${skinId.toLowerCase()}` } : {}),
     ...(hidden ? { hidden: true } : {}),
     ...(saleEnd ? { saleEnd } : {}),
     ...(giftCodeHashes.length ? { giftCodeHashes } : {}),
@@ -844,9 +847,11 @@ function buildCatalogEntry() {
 function refresh() {
   const { errors, skinId, price } = buildSkinJson();
 
-  // 가격 힌트
+  // 가격 힌트 (유료면 Play Console에 등록할 SKU도 안내)
   document.getElementById("priceHint").textContent =
-    price <= 0 ? "→ 무료 테마" : `→ ${price.toLocaleString()}원`;
+    price <= 0
+      ? "→ 무료 테마"
+      : `→ ${price.toLocaleString()}원 · Play SKU: skin_${skinId.toLowerCase()}`;
 
   updateDupHint();
   updateGiftInherited();
