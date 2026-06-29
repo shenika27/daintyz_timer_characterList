@@ -1,11 +1,4 @@
 {
   "baseUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main",
-  "skins": [
-     {
-      "skinId": "muk",
-      "name": "먹방",
-      "isFree": true,
-      "version": 1
-    }
-  ]
+  "skins": []
 }
