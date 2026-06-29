@@ -13,3 +13,14 @@
 
 > ⚠ zip은 반드시 **스킨빌더가 만든 번들**이어야 합니다(안에 `character/zip/`·`character/preview/`·`catalog_entry.json` 포함).
 > 캐릭터 zip만 단독으로 올리면 처리되지 않습니다.
+
+## 삭제 업로드
+
+스킨빌더 우측 `출시된 스킨` 목록에서 삭제 버튼을 누르면 `{skinId}.delete.json` 파일이 만들어집니다. 이 파일을 `_inbox`에 업로드하고 Commit 하면 GitHub Action이 자동으로 다음 정리를 수행합니다.
+
+- `catalog.json`에서 해당 테마 항목 제거
+- `character/zip/{skinId}.zip` 및 `character/preview/{skinId}/` 제거
+- 유료 테마이면 R2의 비공개 zip 삭제 예약
+- 유료 테마이면 Play Console 인앱상품 SKU를 삭제 대신 `inactive`로 비활성화
+
+삭제 마커에 `productId`가 포함되어 있으면 catalog 항목이 이미 사라진 상태에서도 해당 SKU를 비활성화 대상으로 사용합니다.

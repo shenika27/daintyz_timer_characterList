@@ -161,9 +161,11 @@ let deleted = 0;
 const markers = fs.readdirSync(INBOX).filter(f => f.toLowerCase().endsWith(".delete.json"));
 for (const marker of markers) {
   const markerPath = path.join(INBOX, marker);
+  let markerData;
   let skinId;
   try {
-    skinId = JSON.parse(fs.readFileSync(markerPath, "utf8")).deleteSkinId;
+    markerData = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    skinId = String(markerData.deleteSkinId || "").trim();
   } catch {
     log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
     continue;
@@ -174,9 +176,20 @@ for (const marker of markers) {
   }
   // 유료였던 스킨은 zip이 공개 레포가 아니라 R2에 있다 → R2 삭제 큐에 올린다(공개본 제거는 무해한 no-op).
   const existing = catalog.skins.find(s => s.skinId === skinId);
-  if (isPaidEntry(existing)) {
+  const markerProductId = String(markerData.productId || "").trim();
+  const validMarkerProductId = markerProductId && /^[A-Za-z0-9_.]+$/.test(markerProductId);
+  if (markerProductId && !validMarkerProductId) {
+    log(`  ! ${marker}: invalid productId; skip marker-based Play deactivation (${markerProductId})`);
+  }
+  const markerPaid = Number(markerData.price) > 0 || !!validMarkerProductId;
+  const deleteEntry = existing || (markerPaid ? {
+    skinId,
+    productId: validMarkerProductId ? markerProductId : `skin_${skinId.toLowerCase()}`,
+    price: Number(markerData.price) || 1,
+  } : null);
+  if (isPaidEntry(existing) || markerPaid) {
     queueR2Delete(skinId);
-    queuePlayDelete(existing);
+    queuePlayDelete(deleteEntry);
     log(`  → (유료) R2 삭제 + Play 비활성화 예약: ${skinId}`);
   }
   fs.rmSync(path.join(ROOT, "character", "zip", `${skinId}.zip`), { force: true });

@@ -145,8 +145,14 @@
   .rel-search input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
   .rel-search input:focus { outline: none; border-color: var(--accent); }
   #relList { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
-  .rel-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .rel-item { padding: 8px 58px 8px 10px; border-radius: 8px; cursor: pointer; position: relative; }
   .rel-item:hover { background: var(--chip); }
+  .rel-delete {
+    position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); background: #fff; color: var(--sub);
+    border-radius: 7px; cursor: pointer; font-size: 12px; line-height: 1;
+    padding: 5px 7px; margin-top: 1px;
+  }
+  .rel-delete:hover { border-color: var(--danger); color: var(--danger); background: #fff7f6; }
   .rel-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rel-badge { color: var(--accent); font-weight: 700; }
   .rel-meta { font-size: 11.5px; color: var(--sub); margin-top: 2px; }
@@ -1087,18 +1093,37 @@ async function loadSkinForEdit(entry) {
   }
 }
 
+function productIdOfEntry(entry, skinId) {
+  return entry?.productId || `skin_${String(skinId || entry?.skinId || "").toLowerCase()}`;
+}
+
 // 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
-function makeDeleteMarker() {
-  const id = (prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):") || "").trim();
+function makeDeleteMarker(entry = null) {
+  const fallbackId = entry?.skinId || document.getElementById("skinId").value.trim();
+  const id = (entry?.skinId || prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):", fallbackId) || "").trim();
   if (!id) return;
   if (!/^[A-Za-z0-9_]+$/.test(id)) { alert("skinId 형식이 올바르지 않습니다(영문/숫자/_)."); return; }
-  if (!confirm(`정말 '${id}' 테마를 삭제할까요?\n상점·창고·미리보기에서 모두 제거됩니다.\n(기록은 남아 있어 복구는 가능합니다.)`)) return;
-  const blob = new Blob([JSON.stringify({ deleteSkinId: id }, null, 2)], { type: "application/json" });
+  const catalogEntry = entry || releasedSkins.find(s => (s.skinId || "").toLowerCase() === id.toLowerCase()) || null;
+  const price = Math.max(0, Number(catalogEntry?.price) || 0);
+  const paid = price > 0;
+  const productId = paid ? productIdOfEntry(catalogEntry, id) : "";
+  const playLine = paid ? `\nPlay SKU '${productId}'도 비활성화(inactive) 예약됩니다.` : "";
+  if (!confirm(`정말 '${id}' 테마를 삭제할까요?\n상점·창고·미리보기에서 모두 제거됩니다.${playLine}\n(기록은 남아 있어 복구는 가능합니다.)`)) return;
+  const marker = {
+    deleteSkinId: id,
+    source: "skin-builder",
+    requestedAt: new Date().toISOString(),
+    ...(catalogEntry?.name ? { name: catalogEntry.name } : {}),
+    ...(paid ? { price, productId } : {}),
+  };
+  const blob = new Blob([JSON.stringify(marker, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${id}.delete.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  document.getElementById("status").innerHTML =
+    `<b>${escapeHtml(id)}.delete.json</b> 저장됨 → <b>업로드</b>하면 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다.`;
   alert(`삭제 파일 '${id}.delete.json' 을 저장했습니다.\n📤 업로드 하면 자동으로 삭제됩니다.`);
 }
 
@@ -1160,6 +1185,16 @@ function renderReleased() {
       `<div class="rel-meta"><code>${escapeHtml(s.skinId || "?")}</code> · ${price}` +
         `${s.version ? ` · v${s.version}` : ""}` +
         `${s.saleEnd ? `<br>🕒 ~${escapeHtml(s.saleEnd)} 까지` : ""}</div>`;
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "rel-delete";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "삭제";
+    deleteBtn.title = "이 테마 삭제 파일 만들기";
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      makeDeleteMarker(s);
+    };
+    li.appendChild(deleteBtn);
     li.onclick = () => loadSkinForEdit(s);
     ul.appendChild(li);
   });
