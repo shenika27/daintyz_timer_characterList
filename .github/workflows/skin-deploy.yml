@@ -64,6 +64,19 @@ jobs:
             done < _r2_delete.txt
           fi
 
+      # 유료 스킨이 새로 올라오면 Play 인앱상품(SKU)을 자동 등록/수정한다.
+      # apply 스크립트가 _play_upsert.json(등록할 유료 상품) / _play_delete.txt(비활성화할 productId)를 만든다.
+      # 무료 전용이면 둘 다 없어 스크립트가 통째로 건너뛴다 → 토큰 없이도 무료 파이프라인 정상 동작.
+      # 유료 변경이 있는데 토큰/권한이 없으면 여기서 실패 → 아래 커밋 스텝이 실행되지 않아
+      # "catalog엔 유료 스킨이 보이는데 Play엔 상품이 없는" 깨진 상태를 방지한다.
+      - name: Play 인앱상품 동기화 (유료 스킨)
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          ANDROID_PACKAGE_NAME: com.daintyz.timerwidget
+          # 신규 상품은 비활성으로 생성(안정화 후 Play Console에서 '활성'만 누르면 판매 시작).
+          PLAY_PRODUCT_STATUS: inactive
+        run: node scripts/sync-play-products.mjs
+
       - name: 변경사항 커밋
         run: |
           git config user.name "skin-bot"
