@@ -6,8 +6,6 @@
       "name": "먹방",
       "isFree": true,
       "version": 1
-    },
-    {"skinId": "cha02", "name": "런닝홉빵2", "price": 1000, "prestige": false, "version": 1},
-    {"skinId": "cha03", "name": "런닝홉빵3", "price": 10000, "prestige": true, "version": 1}
+    }
   ]
 }
