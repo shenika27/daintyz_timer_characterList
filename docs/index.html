@@ -214,6 +214,12 @@
       <label class="field"><span>테마 이름 (상점 표시명) <b style="color:var(--danger)">*</b></span>
         <input type="text" id="name" placeholder="팡팡 토끼" autocomplete="off"></label>
     </div>
+    <div class="grid two" style="margin-top:12px">
+      <label class="field"><span>영문 테마 이름 (선택)</span>
+        <input type="text" id="nameEn" placeholder="Bouncy Bunny" autocomplete="off"></label>
+      <label class="field"><span>영문 부제 (선택)</span>
+        <input type="text" id="descriptionEn" placeholder="A bunny hopping over the moon" autocomplete="off"></label>
+    </div>
     <p class="hint" id="skinIdDup" style="margin:6px 0 0"></p>
     <div class="grid two" style="margin-top:12px">
       <label class="field"><span>가격 (원) — 0이면 무료</span>
@@ -807,6 +813,8 @@ function buildSkinJson() {
   const hidden = document.getElementById("hidden").checked;
   const saleEnd = document.getElementById("saleEnd").value.trim(); // "yyyy-mm-dd" | ""
   const description = document.getElementById("description").value.trim();
+  const nameEn = document.getElementById("nameEn").value.trim();
+  const descriptionEn = document.getElementById("descriptionEn").value.trim();
   const createdAt = document.getElementById("createdAt").value.trim(); // date 인풋 → "yyyy-mm-dd"
   const errors = [];
 
@@ -843,6 +851,7 @@ function buildSkinJson() {
     skinId, name, isFree,
     ...(prestige ? { prestige: true } : {}),
     ...(description ? { description } : {}),
+    ...((nameEn || descriptionEn) ? { localized: { en: { ...(nameEn ? { name: nameEn } : {}), ...(descriptionEn ? { description: descriptionEn } : {}) } } } : {}),
     ...(createdAt ? { createdAt } : {}),
     character,
   };
@@ -892,6 +901,7 @@ function buildCatalogEntry() {
     ...(hidden ? { hidden: true } : {}),
     ...(saleEnd ? { saleEnd } : {}),
     ...(description ? { description } : {}),
+    ...(json.localized ? { localized: json.localized } : {}),
     ...(createdAt ? { createdAt } : {}),
     version: 1, // Action이 갱신(기존 스킨 재업로드 시 +1)
   };
@@ -1062,11 +1072,13 @@ async function loadSkinForEdit(entry) {
     // 2) 메타데이터(catalog entry 우선, 없으면 skin.json)
     document.getElementById("skinId").value = entry.skinId || skinJson.skinId || "";
     document.getElementById("name").value = entry.name || skinJson.name || "";
+    document.getElementById("nameEn").value = entry.localized?.en?.name || skinJson.localized?.en?.name || "";
     document.getElementById("price").value = Number(entry.price) || 0;
     document.getElementById("prestige").checked = !!entry.prestige;
     document.getElementById("hidden").checked = !!entry.hidden;
     document.getElementById("saleEnd").value = entry.saleEnd || "";
     document.getElementById("description").value = entry.description || skinJson.description || "";
+    document.getElementById("descriptionEn").value = entry.localized?.en?.description || skinJson.localized?.en?.description || "";
     document.getElementById("createdAt").value = entry.createdAt || skinJson.createdAt || todayLocal();
     // 3) 캐릭터 프레임
     const ch = skinJson.character || {};
@@ -1191,7 +1203,10 @@ function renderReleased() {
   const ul = document.getElementById("relList");
   const q = document.getElementById("relSearch").value.trim().toLowerCase();
   const list = releasedSkins.filter(s =>
-    !q || (s.skinId || "").toLowerCase().includes(q) || (s.name || "").toLowerCase().includes(q));
+    !q ||
+    (s.skinId || "").toLowerCase().includes(q) ||
+    (s.name || "").toLowerCase().includes(q) ||
+    (s.localized?.en?.name || "").toLowerCase().includes(q));
   document.getElementById("relCount").textContent = `${list.length}/${releasedSkins.length}`;
   if (!list.length) {
     ul.innerHTML = `<li class="rel-empty">${releasedSkins.length ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
@@ -1201,16 +1216,19 @@ function renderReleased() {
   list.forEach(s => {
     const free = s.isFree || !s.price || Number(s.price) <= 0;
     const price = free ? "무료" : `${Number(s.price).toLocaleString()}원`;
+    const enName = s.localized?.en?.name || "";
     const li = document.createElement("li");
     li.className = "rel-item";
     li.title = "클릭 → 이 스킨을 폼으로 불러오기(수정용)";
     li.innerHTML =
       `<div class="rel-name">${escapeHtml(s.name || "(이름 없음)")}` +
+        `${enName ? ` <span class="rel-badge" style="color:var(--sub)">EN</span>` : ""}` +
         `${s.prestige ? ' <span class="rel-badge">✦</span>' : ""}` +
         `${s.hidden ? ' <span class="rel-badge" style="color:var(--sub)">🚫숨김</span>' : ""}` +
         `${s.saleEnd ? ' <span class="rel-badge" style="color:var(--sub)">🕒한정</span>' : ""}` +
         `${(s.giftCodeHashes && s.giftCodeHashes.length) ? ' <span class="rel-badge" style="color:var(--sub)">🎁코드</span>' : ""}</div>` +
       `<div class="rel-meta"><code>${escapeHtml(s.skinId || "?")}</code> · ${price}` +
+        `${enName ? ` · ${escapeHtml(enName)}` : ""}` +
         `${s.version ? ` · v${s.version}` : ""}` +
         `${s.saleEnd ? `<br>🕒 ~${escapeHtml(s.saleEnd)} 까지` : ""}</div>`;
     const deleteBtn = document.createElement("button");
@@ -1379,7 +1397,7 @@ function todayLocal() {
 // 출시일은 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
 document.getElementById("createdAt").value = todayLocal();
 
-["skinId", "name", "price", "prestige", "hidden", "saleEnd", "description", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
+["skinId", "name", "nameEn", "price", "prestige", "hidden", "saleEnd", "description", "descriptionEn", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);

@@ -47,6 +47,7 @@ function queuePlayUpsert(entry) {
     productId: productIdOf(entry),
     skinId: entry.skinId,
     name: entry.name,
+    ...(entry.localized ? { localized: entry.localized } : {}),
     price: Number(entry.price) || 0,
   });
 }
@@ -148,6 +149,9 @@ for (const zip of zips) {
       : [];
     if (!Array.isArray(entry.giftCodeHashes) && previousGiftHashes.length > 0) {
       entry.giftCodeHashes = previousGiftHashes;
+    }
+    if (!entry.localized && catalog.skins[idx].localized) {
+      entry.localized = catalog.skins[idx].localized;
     }
     catalog.skins[idx] = entry;
     log(`  → catalog 갱신: ${entry.skinId} (version ${entry.version})`);

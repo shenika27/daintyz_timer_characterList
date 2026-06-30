@@ -125,6 +125,9 @@ async function apiFetch(token, url, method, body) {
 function buildProduct(item, prev) {
   const priceMicros = String(Math.round(Number(item.price) * 1_000_000));
   const title = String(item.name || item.skinId).slice(0, 55);
+  const enTitle = String(item.localized?.en?.name || "").trim().slice(0, 55);
+  const listings = { "ko-KR": { title, description: title } };
+  if (enTitle) listings["en-US"] = { title: enTitle, description: enTitle };
   return {
     packageName: PKG,
     sku: item.productId,
@@ -132,7 +135,7 @@ function buildProduct(item, prev) {
     purchaseType: "managedUser", // 1회 구매 비소비성(스킨 영구 보유)
     defaultLanguage: prev?.defaultLanguage || "ko-KR",
     defaultPrice: { priceMicros, currency: CURRENCY },
-    listings: { "ko-KR": { title, description: title } },
+    listings,
   };
 }
 
