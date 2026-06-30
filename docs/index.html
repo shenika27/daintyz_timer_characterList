@@ -241,12 +241,6 @@
       <div></div>
     </div>
     <p class="hint" id="saleHint" style="margin:6px 0 0">업로드 즉시 판매가 시작됩니다. 종료일을 지정하면 그날까지만 구매 가능하고, 지나면 상점에 '기간만료'로 잠겨 표시됩니다(이미 보유한 사용자는 계속 사용). 비우면 상시 판매.</p>
-    <div style="margin-top:12px">
-      <label class="field"><span>기프트코드 (선택 — 쉼표로 여러 개)</span>
-        <input type="text" id="giftCodes" placeholder="예: HOPPANG2026, FRIEND-7" autocomplete="off"></label>
-      <p class="hint" style="margin:6px 0 0">사용자가 앱 <b>설정 → 기프트코드</b>에 이 코드를 입력하면 테마가 해금됩니다. 영문·숫자·<code>-</code>만, 대소문자·공백은 무시돼요. 코드는 안전하게 보관되며 <b>원문은 다시 볼 수 없으니 따로 기록</b>해두세요.</p>
-      <div id="giftInherited" style="margin:6px 0 0;font-size:12.5px"></div>
-    </div>
   </section>
 
   <!-- 2. 캐릭터 상태 -->
@@ -342,22 +336,29 @@
     <button id="opsCollapse" type="button" title="운영 도구 접기">×</button>
   </div>
   <div class="ops-body">
-    <h3>평생이용권 해금코드</h3>
-    <p class="hint">앱 설정의 기프트코드에 입력하면 프리스티지 제외 유료 테마를 일괄 해금합니다.</p>
+    <h3>기프트/해금 코드</h3>
+    <p class="hint">앱 설정의 기프트코드에 입력할 코드를 만듭니다. 평생이용권 또는 개별 테마를 선택해 JSON을 만든 뒤 _inbox에 업로드하세요.</p>
     <div class="grid">
+      <label class="field"><span>해금 대상</span>
+        <select id="giftTargetType">
+          <option value="lifetime">평생이용권</option>
+          <option value="skin">개별 테마</option>
+        </select></label>
+      <label class="field" id="giftTargetSkinField"><span>skinId (개별 테마)</span>
+        <input type="text" id="giftTargetSkinId" placeholder="예: cha07" autocomplete="off"></label>
       <label class="field"><span>코드 자동 생성 개수</span>
         <input type="number" id="lifetimePassGenerateCount" min="1" max="100" step="1" value="10" autocomplete="off"></label>
-      <label class="field"><span>입력 가능 기한 <b style="color:var(--danger)">*</b></span>
+      <label class="field" id="giftExpiresField"><span>입력 가능 기한 <b style="color:var(--danger)">*</b></span>
         <input type="date" id="lifetimePassExpiresAt" autocomplete="off"></label>
-      <label class="field"><span>사용 제한</span>
+      <label class="field" id="giftUsageField"><span>사용 제한</span>
         <select id="lifetimePassUsageLimit">
           <option value="unlimited">제한 없음</option>
           <option value="once">1회 소진</option>
         </select></label>
-      <label class="field"><span>평생이용권 코드</span>
+      <label class="field"><span>해금 코드</span>
         <textarea id="lifetimePassCodes" placeholder="예: PASS-2026-ABCD, VIP-7DAYS"></textarea></label>
     </div>
-    <p class="hint" style="margin:8px 0 0">영문·숫자·<code>-</code>만 허용합니다. 저장 파일에는 SHA-256 해시만 들어가므로, 만든 코드는 따로 보관해 주세요.</p>
+    <p class="hint" style="margin:8px 0 0">영문·숫자·<code>-</code>만 허용합니다. 저장 파일에는 SHA-256 해시만 들어가므로, 만든 코드는 따로 보관해 주세요. 개별 테마 코드는 catalog의 해당 skinId에 병합됩니다.</p>
     <div id="lifetimePassCodeHint" style="margin:6px 0 0;font-size:12.5px;color:var(--sub)"></div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="pick" id="generateLifetimePassCodes" type="button">자동 생성</button>
@@ -415,9 +416,6 @@ const assets = {};
 // 미리보기 저장소: thumb(단일) + prev 프레임 배열
 let previewThumb = null;            // { file, url } | null
 const previewFrames = [];           // [{ id, file, url }]
-
-// 편집 로드 시 catalog에서 가져온 기존 기프트코드 해시(원문 복구 불가). 새로 입력하지 않으면 그대로 유지.
-let inheritedGiftHashes = [];
 
 let frameSeq = 0;
 
@@ -810,15 +808,10 @@ function buildSkinJson() {
   const saleEnd = document.getElementById("saleEnd").value.trim(); // "yyyy-mm-dd" | ""
   const description = document.getElementById("description").value.trim();
   const createdAt = document.getElementById("createdAt").value.trim(); // date 인풋 → "yyyy-mm-dd"
-  const giftCodes = parseGiftCodes(document.getElementById("giftCodes").value);
   const errors = [];
 
   if (!/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("skinId는 영문/숫자/_ 만 사용하세요.");
   if (!name) errors.push("테마 이름을 입력하세요.");
-  giftCodes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`기프트코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
-  const typedHashes = giftCodes.filter(c => /^[A-Z0-9-]+$/.test(c)).map(sha256);
-  // 새로 입력한 코드가 있으면 그것으로 교체, 없으면 편집 로드로 상속된 기존 해시를 유지.
-  const giftCodeHashes = typedHashes.length ? typedHashes : inheritedGiftHashes.slice();
 
   function frameSet(stateKey) {
     const arr = store[stateKey].frames;
@@ -884,12 +877,12 @@ function buildSkinJson() {
     json.timer = timer;
   }
 
-  return { json, errors, skinId, price, prestige, hidden, saleEnd, giftCodeHashes, description, createdAt };
+  return { json, errors, skinId, price, prestige, hidden, saleEnd, description, createdAt };
 }
 
 // catalog.json "skins" 배열에 들어갈 항목. 번들의 catalog_entry.json + 화면 스니펫 공용.
 function buildCatalogEntry() {
-  const { json, skinId, price, prestige, hidden, saleEnd, giftCodeHashes, description, createdAt } = buildSkinJson();
+  const { json, skinId, price, prestige, hidden, saleEnd, description, createdAt } = buildSkinJson();
   if (!skinId || !json.name) return null;
   return {
     skinId, name: json.name, price, prestige,
@@ -898,7 +891,6 @@ function buildCatalogEntry() {
     ...(price > 0 ? { productId: `skin_${skinId.toLowerCase()}` } : {}),
     ...(hidden ? { hidden: true } : {}),
     ...(saleEnd ? { saleEnd } : {}),
-    ...(giftCodeHashes.length ? { giftCodeHashes } : {}),
     ...(description ? { description } : {}),
     ...(createdAt ? { createdAt } : {}),
     version: 1, // Action이 갱신(기존 스킨 재업로드 시 +1)
@@ -916,7 +908,6 @@ function refresh() {
       : `→ ${price.toLocaleString()}원 · Play SKU: skin_${skinId.toLowerCase()}`;
 
   updateDupHint();
-  updateGiftInherited();
 
   const status = document.getElementById("status");
   const btn = document.getElementById("makeBtn");
@@ -993,21 +984,6 @@ async function makeZip() {
 /* ---------- 편집 로드(기존 스킨 불러오기) + 삭제 ---------- */
 const RAW_BASE = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main";
 
-function updateGiftInherited() {
-  const el = document.getElementById("giftInherited");
-  if (!el) return;
-  if (!inheritedGiftHashes.length) { el.innerHTML = ""; return; }
-  const typed = parseGiftCodes(document.getElementById("giftCodes").value).length;
-  if (typed) {
-    el.innerHTML = `<span style="color:var(--accent)">새 코드로 교체됩니다(기존 ${inheritedGiftHashes.length}개 대체).</span>`;
-  } else {
-    el.innerHTML = `<span style="color:var(--sub)">🎁 기존 기프트코드 <b>${inheritedGiftHashes.length}개</b> 유지 중(원문 복구 불가). </span>` +
-      `<button class="pick" type="button" id="giftClearBtn" style="padding:2px 8px;font-size:12px">비우기</button>`;
-    const b = document.getElementById("giftClearBtn");
-    if (b) b.onclick = () => { inheritedGiftHashes = []; refresh(); };
-  }
-}
-
 // 현재 폼 상태 전체 초기화(편집 로드 직전에 호출).
 function resetBuilderState() {
   STATES.forEach(s => {
@@ -1019,7 +995,6 @@ function resetBuilderState() {
   Object.keys(assets).forEach(k => { if (assets[k].url) URL.revokeObjectURL(assets[k].url); delete assets[k]; });
   if (previewThumb) { URL.revokeObjectURL(previewThumb.url); previewThumb = null; }
   previewFrames.forEach(fr => URL.revokeObjectURL(fr.url)); previewFrames.length = 0;
-  inheritedGiftHashes = [];
 }
 
 // pingpong으로 펼쳐진 프레임 이름(fwd + reverse(fwd[1..-2]))이면 원본 forward로 되돌린다.
@@ -1093,9 +1068,6 @@ async function loadSkinForEdit(entry) {
     document.getElementById("saleEnd").value = entry.saleEnd || "";
     document.getElementById("description").value = entry.description || skinJson.description || "";
     document.getElementById("createdAt").value = entry.createdAt || skinJson.createdAt || todayLocal();
-    document.getElementById("giftCodes").value = "";
-    inheritedGiftHashes = Array.isArray(entry.giftCodeHashes) ? entry.giftCodeHashes.slice() : [];
-
     // 3) 캐릭터 프레임
     const ch = skinJson.character || {};
     await loadFrameSetInto(zip, prefix, "stop", ch.stop);
@@ -1293,22 +1265,35 @@ function randomLifetimePassCode() {
   else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
   let raw = "";
   for (const b of bytes) raw += alphabet[b % alphabet.length];
-  return `PASS-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+  const prefix = document.getElementById("giftTargetType")?.value === "skin" ? "GIFT" : "PASS";
+  return `${prefix}-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 }
 
 function updateLifetimePassCodeHint() {
   const hint = document.getElementById("lifetimePassCodeHint");
+  const targetType = document.getElementById("giftTargetType").value;
+  const skinId = document.getElementById("giftTargetSkinId").value.trim();
   const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
   const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
   const usageLimit = document.getElementById("lifetimePassUsageLimit").value;
   const usageText = usageLimit === "once" ? "1회 소진" : "제한 없음";
   const bad = codes.filter(c => !/^[A-Z0-9-]+$/.test(c));
+  const skinTargetOn = targetType === "skin";
+  document.getElementById("giftTargetSkinField").style.display = skinTargetOn ? "" : "none";
+  document.getElementById("giftExpiresField").style.display = skinTargetOn ? "none" : "";
+  document.getElementById("giftUsageField").style.display = skinTargetOn ? "none" : "";
   if (!codes.length) {
     hint.textContent = "코드를 입력하거나 자동 생성해 주세요.";
     hint.style.color = "var(--sub)";
   } else if (bad.length) {
     hint.textContent = `형식 오류: ${bad.join(", ")}`;
     hint.style.color = "var(--danger)";
+  } else if (skinTargetOn && !/^[A-Za-z0-9_]+$/.test(skinId)) {
+    hint.textContent = "개별 테마 코드는 skinId를 입력해야 합니다.";
+    hint.style.color = "var(--sub)";
+  } else if (skinTargetOn) {
+    hint.textContent = `${codes.length}개 코드 준비됨 · ${skinId} 테마 해금`;
+    hint.style.color = "var(--ok)";
   } else if (!expiresAt) {
     hint.textContent = `${codes.length}개 코드 준비됨 · 입력 가능 기한을 선택해 주세요.`;
     hint.style.color = "var(--sub)";
@@ -1331,17 +1316,27 @@ function generateLifetimePassCodes() {
 }
 
 function makeLifetimePassMarker() {
+  const targetType = document.getElementById("giftTargetType").value;
+  const skinId = document.getElementById("giftTargetSkinId").value.trim();
   const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
   const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
   const usageLimit = document.getElementById("lifetimePassUsageLimit").value;
   const maxUses = usageLimit === "once" ? 1 : 0;
   const errors = [];
-  if (!codes.length) errors.push("평생이용권 코드를 입력하거나 자동 생성하세요.");
-  if (!expiresAt) errors.push("입력 가능 기한을 선택하세요.");
+  if (!codes.length) errors.push("해금 코드를 입력하거나 자동 생성하세요.");
+  if (targetType === "lifetime" && !expiresAt) errors.push("입력 가능 기한을 선택하세요.");
+  if (targetType === "skin" && !/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("개별 테마 skinId는 영문/숫자/_ 만 사용하세요.");
   codes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
   if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return; }
 
-  const marker = {
+  const marker = targetType === "skin" ? {
+    source: "skin-builder",
+    requestedAt: new Date().toISOString(),
+    skinGiftCodes: codes.map(code => ({
+      skinId,
+      hash: sha256(code),
+    })),
+  } : {
     source: "skin-builder",
     requestedAt: new Date().toISOString(),
     lifetimePassGiftCodes: codes.map(code => ({
@@ -1353,11 +1348,13 @@ function makeLifetimePassMarker() {
   const blob = new Blob([JSON.stringify(marker, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `lifetime-pass-${expiresAt}.lifetime-pass-codes.json`;
+  a.download = targetType === "skin"
+    ? `${skinId}.skin-gift-codes.json`
+    : `lifetime-pass-${expiresAt}.lifetime-pass-codes.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   document.getElementById("status").innerHTML =
-    `<b>${escapeHtml(a.download)}</b> 저장됨 → <b>업로드</b>하면 평생이용권 코드가 catalog에 병합됩니다.`;
+    `<b>${escapeHtml(a.download)}</b> 저장됨 → <b>업로드</b>하면 해금 코드가 catalog에 병합됩니다.`;
 }
 
 function setupOpsPanel() {
@@ -1382,12 +1379,12 @@ function todayLocal() {
 // 출시일은 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
 document.getElementById("createdAt").value = todayLocal();
 
-["skinId", "name", "price", "prestige", "hidden", "saleEnd", "giftCodes", "description", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
+["skinId", "name", "price", "prestige", "hidden", "saleEnd", "description", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);
 });
-["lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount", "lifetimePassUsageLimit"].forEach(id => {
+["giftTargetType", "giftTargetSkinId", "lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount", "lifetimePassUsageLimit"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("input", updateLifetimePassCodeHint);
   el.addEventListener("change", updateLifetimePassCodeHint);

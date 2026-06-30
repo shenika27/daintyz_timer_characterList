@@ -61,8 +61,9 @@ const inboxFiles = fs.readdirSync(INBOX);
 const zips = inboxFiles.filter(f => f.toLowerCase().endsWith(".zip"));
 const hasDeleteMarkers = inboxFiles.some(f => f.toLowerCase().endsWith(".delete.json"));
 const passCodeMarkers = inboxFiles.filter(f => f.toLowerCase().endsWith(".lifetime-pass-codes.json"));
-if (zips.length === 0 && !hasDeleteMarkers && passCodeMarkers.length === 0) {
-  log("_inbox에 처리할 zip·삭제마커·평생이용권 코드마커 없음.");
+const skinCodeMarkers = inboxFiles.filter(f => f.toLowerCase().endsWith(".skin-gift-codes.json"));
+if (zips.length === 0 && !hasDeleteMarkers && passCodeMarkers.length === 0 && skinCodeMarkers.length === 0) {
+  log("_inbox에 처리할 zip·삭제마커·해금코드 마커 없음.");
   process.exit(0);
 }
 
@@ -142,6 +143,12 @@ for (const zip of zips) {
   if (idx >= 0) {
     const prevVer = Number(catalog.skins[idx].version) || 1;
     entry.version = prevVer + 1; // 재업로드 = 변경 → 버전 올림
+    const previousGiftHashes = Array.isArray(catalog.skins[idx].giftCodeHashes)
+      ? catalog.skins[idx].giftCodeHashes
+      : [];
+    if (!Array.isArray(entry.giftCodeHashes) && previousGiftHashes.length > 0) {
+      entry.giftCodeHashes = previousGiftHashes;
+    }
     catalog.skins[idx] = entry;
     log(`  → catalog 갱신: ${entry.skinId} (version ${entry.version})`);
   } else {
@@ -248,6 +255,44 @@ if (passCodesApplied > 0) {
   log(`  → 평생이용권 코드 ${passCodesApplied}개 병합`);
 }
 
+// 개별 테마 코드 마커(_inbox/*.skin-gift-codes.json) 처리: catalog.skins[].giftCodeHashes에 병합.
+let skinCodesApplied = 0;
+for (const marker of skinCodeMarkers) {
+  const markerPath = path.join(INBOX, marker);
+  let markerData;
+  try {
+    markerData = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+  } catch {
+    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
+    continue;
+  }
+  const codes = Array.isArray(markerData.skinGiftCodes)
+    ? markerData.skinGiftCodes
+    : [];
+  for (const code of codes) {
+    const skinId = String(code.skinId || "").trim();
+    const hash = String(code.hash || "").trim().toLowerCase();
+    if (!/^[A-Za-z0-9_]+$/.test(skinId) || !/^[a-f0-9]{64}$/.test(hash)) {
+      log(`  ! ${marker}: 개별 테마 코드 형식 오류 — 건너뜀`);
+      continue;
+    }
+    const entry = catalog.skins.find(s => s.skinId === skinId);
+    if (!entry) {
+      log(`  ! ${marker}: catalog에 skinId=${skinId} 없음 — 건너뜀`);
+      continue;
+    }
+    const hashes = Array.isArray(entry.giftCodeHashes) ? entry.giftCodeHashes : [];
+    if (!hashes.includes(hash)) {
+      entry.giftCodeHashes = hashes.concat(hash).sort();
+      skinCodesApplied++;
+    }
+  }
+  fs.rmSync(markerPath, { force: true });
+}
+if (skinCodesApplied > 0) {
+  log(`  → 개별 테마 코드 ${skinCodesApplied}개 병합`);
+}
+
 // catalog 저장 (2-space, 트레일링 개행)
 fs.writeFileSync(CATALOG, JSON.stringify(catalog, null, 2) + "\n");
 
@@ -258,4 +303,4 @@ if (playUpserts.length > 0) {
 }
 
 fs.rmSync(WORK, { recursive: true, force: true });
-log(`완료: ${applied}개 번들 적용, ${deleted}개 삭제, 평생이용권 코드 ${passCodesApplied}개, catalog.json 갱신.`);
+log(`완료: ${applied}개 번들 적용, ${deleted}개 삭제, 평생이용권 코드 ${passCodesApplied}개, 개별 테마 코드 ${skinCodesApplied}개, catalog.json 갱신.`);
