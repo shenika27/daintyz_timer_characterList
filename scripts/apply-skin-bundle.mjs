@@ -59,8 +59,12 @@ if (!fs.existsSync(INBOX)) { log("_inbox 폴더 없음 — 처리할 것 없음.
 
 const inboxFiles = fs.readdirSync(INBOX);
 const zips = inboxFiles.filter(f => f.toLowerCase().endsWith(".zip"));
-const hasMarkers = inboxFiles.some(f => f.toLowerCase().endsWith(".delete.json"));
-if (zips.length === 0 && !hasMarkers) { log("_inbox에 처리할 zip·삭제마커 없음."); process.exit(0); }
+const hasDeleteMarkers = inboxFiles.some(f => f.toLowerCase().endsWith(".delete.json"));
+const passCodeMarkers = inboxFiles.filter(f => f.toLowerCase().endsWith(".lifetime-pass-codes.json"));
+if (zips.length === 0 && !hasDeleteMarkers && passCodeMarkers.length === 0) {
+  log("_inbox에 처리할 zip·삭제마커·평생이용권 코드마커 없음.");
+  process.exit(0);
+}
 
 // catalog 로드 (없으면 생성)
 let catalog;
@@ -70,6 +74,7 @@ try {
   catalog = { skins: [] };
 }
 if (!Array.isArray(catalog.skins)) catalog.skins = [];
+if (!Array.isArray(catalog.lifetimePassGiftCodes)) catalog.lifetimePassGiftCodes = [];
 
 fs.rmSync(WORK, { recursive: true, force: true });
 // R2 스테이징/매니페스트는 매 실행 새로 시작(이전 실행 잔여물이 섞이면 안 됨).
@@ -201,6 +206,43 @@ for (const marker of markers) {
   deleted++;
 }
 
+// 평생이용권 코드 마커(_inbox/*.lifetime-pass-codes.json) 처리: catalog 최상위 lifetimePassGiftCodes에 병합.
+let passCodesApplied = 0;
+for (const marker of passCodeMarkers) {
+  const markerPath = path.join(INBOX, marker);
+  let markerData;
+  try {
+    markerData = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+  } catch {
+    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
+    continue;
+  }
+  const codes = Array.isArray(markerData.lifetimePassGiftCodes)
+    ? markerData.lifetimePassGiftCodes
+    : [];
+  for (const code of codes) {
+    const hash = String(code.hash || "").trim().toLowerCase();
+    const expiresAt = String(code.expiresAt || "").trim();
+    if (!/^[a-f0-9]{64}$/.test(hash) || !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+      log(`  ! ${marker}: 평생이용권 코드 형식 오류 — 건너뜀`);
+      continue;
+    }
+    const next = { hash, expiresAt };
+    const idx = catalog.lifetimePassGiftCodes.findIndex(c => c.hash === hash);
+    if (idx >= 0) catalog.lifetimePassGiftCodes[idx] = next;
+    else catalog.lifetimePassGiftCodes.push(next);
+    passCodesApplied++;
+  }
+  fs.rmSync(markerPath, { force: true });
+}
+if (passCodesApplied > 0) {
+  catalog.lifetimePassGiftCodes.sort((a, b) =>
+    String(a.expiresAt || "").localeCompare(String(b.expiresAt || "")) ||
+    String(a.hash || "").localeCompare(String(b.hash || ""))
+  );
+  log(`  → 평생이용권 코드 ${passCodesApplied}개 병합`);
+}
+
 // catalog 저장 (2-space, 트레일링 개행)
 fs.writeFileSync(CATALOG, JSON.stringify(catalog, null, 2) + "\n");
 
@@ -211,4 +253,4 @@ if (playUpserts.length > 0) {
 }
 
 fs.rmSync(WORK, { recursive: true, force: true });
-log(`완료: ${applied}개 번들 적용, ${deleted}개 삭제, catalog.json 갱신.`);
+log(`완료: ${applied}개 번들 적용, ${deleted}개 삭제, 평생이용권 코드 ${passCodesApplied}개, catalog.json 갱신.`);

@@ -33,11 +33,13 @@
   .grid.two { grid-template-columns: 1fr 1fr; }
   label.field { display: block; font-size: 13px; }
   label.field > span { display: block; margin-bottom: 5px; color: var(--sub); font-weight: 600; }
-  input[type=text], input[type=number], input[type=date], select {
+  input[type=text], input[type=number], input[type=date], textarea, select {
     width: 100%; padding: 9px 10px; border: 1px solid var(--line);
     border-radius: 8px; font-size: 14px; background: #fff; color: var(--ink);
+    font-family: inherit;
   }
-  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
   .check input { width: 16px; height: 16px; }
 
@@ -222,6 +224,28 @@
         <input type="text" id="giftCodes" placeholder="예: HOPPANG2026, FRIEND-7" autocomplete="off"></label>
       <p class="hint" style="margin:6px 0 0">사용자가 앱 <b>설정 → 기프트코드</b>에 이 코드를 입력하면 테마가 해금됩니다. 영문·숫자·<code>-</code>만, 대소문자·공백은 무시돼요. 코드는 안전하게 보관되며 <b>원문은 다시 볼 수 없으니 따로 기록</b>해두세요.</p>
       <div id="giftInherited" style="margin:6px 0 0;font-size:12.5px"></div>
+    </div>
+  </section>
+
+  <!-- 운영 도구: 평생이용권 코드 -->
+  <section class="card">
+    <h2>운영 도구: 평생이용권 해금코드</h2>
+    <p class="hint">앱 <b>설정 → 기프트코드</b>에서 입력하면 프리스티지 제외 유료 테마를 일괄 해금하는 코드입니다. 아래에서 만든 JSON을 <b>업로드</b>에 올리면 catalog 최상위에 병합됩니다.</p>
+    <div class="grid two">
+      <label class="field"><span>코드 자동 생성 개수</span>
+        <input type="number" id="lifetimePassGenerateCount" min="1" max="100" step="1" value="10" autocomplete="off"></label>
+      <label class="field"><span>입력 가능 기한 <b style="color:var(--danger)">*</b></span>
+        <input type="date" id="lifetimePassExpiresAt" autocomplete="off"></label>
+    </div>
+    <div style="margin-top:12px">
+      <label class="field"><span>평생이용권 코드 (쉼표·줄바꿈으로 여러 개)</span>
+        <textarea id="lifetimePassCodes" placeholder="예: PASS-2026-ABCD, VIP-7DAYS"></textarea></label>
+      <p class="hint" style="margin:6px 0 0">영문·숫자·<code>-</code>만 허용합니다. 저장 파일에는 원문이 아니라 SHA-256 해시만 들어가므로, 만든 코드는 따로 보관해 주세요.</p>
+      <div id="lifetimePassCodeHint" style="margin:6px 0 0;font-size:12.5px;color:var(--sub)"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="pick" id="generateLifetimePassCodes" type="button">자동 생성</button>
+      <button class="pick" id="makeLifetimePassMarker" type="button">평생이용권 코드 JSON 만들기</button>
     </div>
   </section>
 
@@ -1229,6 +1253,73 @@ function setupReleasedPanel() {
   loadReleased();
 }
 
+/* ---------- 평생이용권 코드 마커 ---------- */
+function randomLifetimePassCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(12);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  let raw = "";
+  for (const b of bytes) raw += alphabet[b % alphabet.length];
+  return `PASS-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+function updateLifetimePassCodeHint() {
+  const hint = document.getElementById("lifetimePassCodeHint");
+  const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
+  const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
+  const bad = codes.filter(c => !/^[A-Z0-9-]+$/.test(c));
+  if (!codes.length) {
+    hint.textContent = "코드를 입력하거나 자동 생성해 주세요.";
+    hint.style.color = "var(--sub)";
+  } else if (bad.length) {
+    hint.textContent = `형식 오류: ${bad.join(", ")}`;
+    hint.style.color = "var(--danger)";
+  } else if (!expiresAt) {
+    hint.textContent = `${codes.length}개 코드 준비됨 · 입력 가능 기한을 선택해 주세요.`;
+    hint.style.color = "var(--sub)";
+  } else {
+    hint.textContent = `${codes.length}개 코드 준비됨 · ${expiresAt}까지 입력 가능`;
+    hint.style.color = "var(--ok)";
+  }
+}
+
+function generateLifetimePassCodes() {
+  const count = Math.min(100, Math.max(1, parseInt(document.getElementById("lifetimePassGenerateCount").value) || 1));
+  const existing = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
+  const codes = existing.slice();
+  while (codes.length < existing.length + count) {
+    const code = randomLifetimePassCode();
+    if (!codes.includes(code)) codes.push(code);
+  }
+  document.getElementById("lifetimePassCodes").value = codes.join("\n");
+  updateLifetimePassCodeHint();
+}
+
+function makeLifetimePassMarker() {
+  const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
+  const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
+  const errors = [];
+  if (!codes.length) errors.push("평생이용권 코드를 입력하거나 자동 생성하세요.");
+  if (!expiresAt) errors.push("입력 가능 기한을 선택하세요.");
+  codes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
+  if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return; }
+
+  const marker = {
+    source: "skin-builder",
+    requestedAt: new Date().toISOString(),
+    lifetimePassGiftCodes: codes.map(code => ({ hash: sha256(code), expiresAt })),
+  };
+  const blob = new Blob([JSON.stringify(marker, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `lifetime-pass-${expiresAt}.lifetime-pass-codes.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  document.getElementById("status").innerHTML =
+    `<b>${escapeHtml(a.download)}</b> 저장됨 → <b>업로드</b>하면 평생이용권 코드가 catalog에 병합됩니다.`;
+}
+
 /* ---------- init ---------- */
 buildStateCards();
 buildAssetSlot("background", "타이머 배경", "image/*");
@@ -1250,8 +1341,16 @@ document.getElementById("createdAt").value = todayLocal();
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);
 });
+["lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount"].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener("input", updateLifetimePassCodeHint);
+  el.addEventListener("change", updateLifetimePassCodeHint);
+});
+document.getElementById("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
+document.getElementById("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
 document.getElementById("makeBtn").addEventListener("click", makeZip);
 refresh();
+updateLifetimePassCodeHint();
 setupReleasedPanel();
 </script>
 </body>
