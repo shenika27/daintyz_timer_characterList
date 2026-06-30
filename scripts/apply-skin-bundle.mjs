@@ -223,11 +223,16 @@ for (const marker of passCodeMarkers) {
   for (const code of codes) {
     const hash = String(code.hash || "").trim().toLowerCase();
     const expiresAt = String(code.expiresAt || "").trim();
+    const maxUses = Math.max(0, Number(code.maxUses) || 0);
     if (!/^[a-f0-9]{64}$/.test(hash) || !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
       log(`  ! ${marker}: 평생이용권 코드 형식 오류 — 건너뜀`);
       continue;
     }
-    const next = { hash, expiresAt };
+    if (maxUses !== 0 && maxUses !== 1) {
+      log(`  ! ${marker}: 평생이용권 maxUses는 1 또는 생략만 허용 — 건너뜀`);
+      continue;
+    }
+    const next = { hash, expiresAt, ...(maxUses > 0 ? { maxUses } : {}) };
     const idx = catalog.lifetimePassGiftCodes.findIndex(c => c.hash === hash);
     if (idx >= 0) catalog.lifetimePassGiftCodes[idx] = next;
     else catalog.lifetimePassGiftCodes.push(next);
