@@ -211,24 +211,24 @@
     <div class="grid two">
       <label class="field"><span>skinId (예: cha07) <b style="color:var(--danger)">*</b></span>
         <input type="text" id="skinId" placeholder="cha07" autocomplete="off"></label>
-      <label class="field"><span>테마 이름 (상점 표시명) <b style="color:var(--danger)">*</b></span>
-        <input type="text" id="name" placeholder="팡팡 토끼" autocomplete="off"></label>
-    </div>
-    <div class="grid two" style="margin-top:12px">
-      <label class="field"><span>영문 테마 이름 (선택)</span>
-        <input type="text" id="nameEn" placeholder="Bouncy Bunny" autocomplete="off"></label>
-      <label class="field"><span>영문 부제 (선택)</span>
-        <input type="text" id="descriptionEn" placeholder="A bunny hopping over the moon" autocomplete="off"></label>
+      <label class="field"><span>가격 (원) — 0이면 무료</span>
+        <input type="number" id="price" min="0" step="100" value="0" autocomplete="off">
+        <small id="priceHint" style="display:block;margin-top:6px;color:var(--sub)">→ 무료 테마</small></label>
     </div>
     <p class="hint" id="skinIdDup" style="margin:6px 0 0"></p>
     <div class="grid two" style="margin-top:12px">
-      <label class="field"><span>가격 (원) — 0이면 무료</span>
-        <input type="number" id="price" min="0" step="100" value="0" autocomplete="off"></label>
-      <div style="display:flex;align-items:flex-end;padding-bottom:9px;font-size:13px;color:var(--sub)" id="priceHint">→ 무료 테마</div>
+      <label class="field"><span>테마이름 (한글) <b style="color:var(--danger)">*</b></span>
+        <input type="text" id="name" placeholder="팡팡 토끼" autocomplete="off"></label>
+      <label class="field"><span>부제 (한글, 선택)</span>
+        <input type="text" id="description" placeholder="달 위를 뛰는 토끼" autocomplete="off"></label>
     </div>
     <div class="grid two" style="margin-top:12px">
-      <label class="field"><span>부제 (상점 카드 한 줄 설명, 선택)</span>
-        <input type="text" id="description" placeholder="달 위를 뛰는 토끼" autocomplete="off"></label>
+      <label class="field"><span>테마이름 (영어, 선택)</span>
+        <input type="text" id="nameEn" placeholder="Bouncy Bunny" autocomplete="off"></label>
+      <label class="field"><span>부제 (영어, 선택)</span>
+        <input type="text" id="descriptionEn" placeholder="A bunny hopping over the moon" autocomplete="off"></label>
+    </div>
+    <div class="grid" style="margin-top:12px">
       <label class="field"><span>출시일 (생성일 자동 — NEW 배지 +7일 기준)</span>
         <input type="text" id="createdAt" readonly tabindex="-1"
                style="background:var(--bg);color:var(--sub);cursor:not-allowed" autocomplete="off"></label>
