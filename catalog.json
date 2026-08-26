@@ -1,5 +1,21 @@
 {
   "baseUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main",
   "lifetimePassGiftCodes": [],
-  "skins": []
+  "skins": [
+    {
+      "skinId": "cha01",
+      "name": "홉빵이",
+      "price": 0,
+      "prestige": false,
+      "description": "런닝머신 뛰는 홉빵",
+      "localized": {
+        "en": {
+          "name": "Hope-pan",
+          "description": "Hape-pan running on the treadmill"
+        }
+      },
+      "createdAt": "2026-08-26",
+      "version": 1
+    }
+  ]
 }
