@@ -29,6 +29,14 @@
       },
       "createdAt": "2026-08-26T21:30:11",
       "version": 1
+    },
+    {
+      "skinId": "cha09",
+      "name": "cha09",
+      "price": 0,
+      "prestige": false,
+      "createdAt": "2026-08-26T21:40:45",
+      "version": 1
     }
   ]
 }
