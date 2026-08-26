@@ -977,13 +977,22 @@ async function makeZip() {
     bundle.file("catalog_entry.json", JSON.stringify(buildCatalogEntry(), null, 2));
 
     const blob = await bundle.generateAsync({ type: "blob", compression: "DEFLATE" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${skinId}.zip`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    document.getElementById("status").innerHTML =
-      `✅ <b>${skinId}.zip</b> 저장됨 → <b>📤 업로드</b>를 눌러 끌어다 놓으세요.`;
+    if (inboxReady()) {
+      btn.textContent = "업로드 중…";
+      const ok = await commitToInbox(`${skinId}.zip`, blob, `chore(skin): _inbox/${skinId}.zip (빌더 업로드)`);
+      if (ok) {
+        document.getElementById("status").innerHTML =
+          `✅ <b>${skinId}.zip</b> 업로드 완료 → 1~2분 뒤 Actions에서 상점에 자동 반영됩니다.`;
+      }
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${skinId}.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      document.getElementById("status").innerHTML =
+        `✅ <b>${skinId}.zip</b> 저장됨 → <b>📤 업로드</b>를 눌러 끌어다 놓으세요.`;
+    }
   } catch (e) {
     alert("zip 생성 중 오류: " + e.message);
   } finally {
@@ -993,6 +1002,62 @@ async function makeZip() {
 
 /* ---------- 편집 로드(기존 스킨 불러오기) + 삭제 ---------- */
 const RAW_BASE = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main";
+
+/* ---------- _inbox 원클릭 커밋 (Cloudflare Worker 경유) ----------
+   INBOX_API_URL 이 설정돼 있으면 업로드/삭제가 다운로드 대신 곧바로 커밋된다.
+   비어 있으면(미배포) 기존 "다운로드 → 수동 업로드" 방식으로 자동 폴백한다. */
+const INBOX_API_URL = "https://daintyz-skin-inbox.xornexon.workers.dev"; // _inbox 커밋 프록시 Worker
+
+function inboxReady() { return !!INBOX_API_URL; }
+
+// 접근 비번을 localStorage에 1회 저장하고 재사용. 없으면 물어본다.
+function getInboxKey(force = false) {
+  let key = localStorage.getItem("inboxKey") || "";
+  if (force || !key) {
+    key = (prompt("업로드 접근 비번을 입력하세요(최초 1회만):", key) || "").trim();
+    if (key) localStorage.setItem("inboxKey", key);
+  }
+  return key;
+}
+
+// Blob → base64 문자열(데이터URL 접두사 제거).
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+// _inbox/<filename> 로 파일 하나를 커밋. 성공 true / 실패 false.
+async function commitToInbox(filename, blob, message) {
+  const key = getInboxKey();
+  if (!key) { alert("접근 비번이 없어 취소했습니다."); return false; }
+  const contentBase64 = await blobToBase64(blob);
+  let res, data;
+  try {
+    res = await fetch(INBOX_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, path: `_inbox/${filename}`, contentBase64, message }),
+    });
+    data = await res.json();
+  } catch (e) {
+    alert("업로드 서버에 연결하지 못했습니다: " + e.message);
+    return false;
+  }
+  if (res.status === 401) {
+    localStorage.removeItem("inboxKey"); // 비번 틀림 → 다음엔 다시 묻도록
+    alert("접근 비번이 올바르지 않습니다. 다시 시도하세요.");
+    return false;
+  }
+  if (!data || !data.ok) {
+    alert("업로드 실패: " + (data && data.error ? data.error : res.status));
+    return false;
+  }
+  return true;
+}
 
 // 현재 폼 상태 전체 초기화(편집 로드 직전에 호출).
 function resetBuilderState() {
@@ -1138,7 +1203,7 @@ function productIdOfEntry(entry, skinId) {
 }
 
 // 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
-function makeDeleteMarker(entry = null) {
+async function makeDeleteMarker(entry = null) {
   const fallbackId = entry?.skinId || document.getElementById("skinId").value.trim();
   const id = (entry?.skinId || prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):", fallbackId) || "").trim();
   if (!id) return;
@@ -1157,6 +1222,15 @@ function makeDeleteMarker(entry = null) {
     ...(paid ? { price, productId } : {}),
   };
   const blob = new Blob([JSON.stringify(marker, null, 2)], { type: "application/json" });
+  if (inboxReady()) {
+    const ok = await commitToInbox(`${id}.delete.json`, blob, `chore(skin): _inbox/${id}.delete.json (삭제 요청)`);
+    if (ok) {
+      document.getElementById("status").innerHTML =
+        `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다.`;
+      alert(`'${id}' 삭제 요청을 업로드했습니다.\n1~2분 뒤 Actions에서 자동 처리됩니다.`);
+    }
+    return;
+  }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${id}.delete.json`;

@@ -13,3 +13,6 @@ _inbox_work/
 
 # 에디터/도구
 .claude/
+
+# wrangler 로컬 캐시(계정 ID·인증 등) — 커밋 금지
+worker/.wrangler/

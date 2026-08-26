@@ -1,0 +1,14 @@
+name = "daintyz-skin-inbox"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# 비밀 아님(공개돼도 무방) — 필요하면 값만 바꾸세요.
+[vars]
+OWNER = "shenika27"
+REPO = "daintyz_timer_characterList"
+BRANCH = "main"
+ALLOW_ORIGIN = "https://shenika27.github.io"
+
+# 비밀(GITHUB_TOKEN, ACCESS_KEY)은 여기 적지 말고 아래 명령으로 넣으세요:
+#   npx wrangler secret put GITHUB_TOKEN
+#   npx wrangler secret put ACCESS_KEY
