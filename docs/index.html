@@ -996,7 +996,7 @@ async function makeZip() {
   } catch (e) {
     alert("zip 생성 중 오류: " + e.message);
   } finally {
-    btn.textContent = "⬇ zip 만들기"; btn.disabled = false;
+    btn.textContent = inboxReady() ? "⬆ 업로드 (원클릭)" : "⬇ zip 만들기"; btn.disabled = false;
   }
 }
 
@@ -1489,6 +1489,17 @@ document.getElementById("createdAt").value = todayLocal();
 document.getElementById("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
 document.getElementById("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
 document.getElementById("makeBtn").addEventListener("click", makeZip);
+// 원클릭(Worker 연결)이면: 헷갈리는 수동 '📤 업로드' 링크는 숨기고,
+// 'zip 만들기' 버튼을 곧바로 업로드하는 버튼으로 이름을 바꿔 한 버튼으로 통일한다.
+if (inboxReady()) {
+  const up = document.getElementById("uploadLink");
+  if (up) up.style.display = "none";
+  const mk = document.getElementById("makeBtn");
+  if (mk) mk.textContent = "⬆ 업로드 (원클릭)";
+  const guide = document.querySelector("header p");
+  if (guide) guide.innerHTML =
+    "아래 항목을 채우고 <b>[업로드]</b> 버튼만 누르면 끝입니다. 나머지(배치·등록)는 자동으로 처리돼요.";
+}
 refresh();
 updateLifetimePassCodeHint();
 setupOpsPanel();
