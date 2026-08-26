@@ -810,6 +810,11 @@ function toPngBlob(file) {
 }
 
 /* ---------- 검증 + skin.json 생성 ---------- */
+// 앱에 내장된 기본 스킨 id — 상점 업로드용으로 쓰면 앱 내장본과 충돌해 상점에 안 뜬다.
+// 필요하면 여기에 추가(소문자로).
+const RESERVED_SKIN_IDS = new Set(["cha01"]);
+function isReservedSkinId(id) { return RESERVED_SKIN_IDS.has(String(id || "").trim().toLowerCase()); }
+
 function buildSkinJson() {
   const skinId = document.getElementById("skinId").value.trim();
   const name = document.getElementById("name").value.trim();
@@ -825,6 +830,7 @@ function buildSkinJson() {
   const errors = [];
 
   if (!/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("skinId는 영문/숫자/_ 만 사용하세요.");
+  else if (isReservedSkinId(skinId)) errors.push(`'${skinId}'은(는) 앱 내장 기본 스킨 id라 사용할 수 없어요. 다른 id를 쓰세요.`);
   if (!name) errors.push("테마 이름을 입력하세요.");
 
   function frameSet(stateKey) {
@@ -1302,6 +1308,11 @@ function updateDupHint() {
   // 형식 먼저 검사 — 영문/숫자/_ 외(한글 등)면 바로 거부.
   if (!/^[A-Za-z0-9_]+$/.test(id)) {
     el.textContent = "✗ skinId는 영문/숫자/_ 만 사용할 수 있어요.";
+    el.style.color = "var(--danger)";
+    return;
+  }
+  if (isReservedSkinId(id)) {
+    el.innerHTML = `✗ <b>${escapeHtml(id)}</b>은(는) 앱 내장 기본 스킨이라 쓸 수 없어요. 다른 id를 쓰세요.`;
     el.style.color = "var(--danger)";
     return;
   }
