@@ -16,6 +16,21 @@
       },
       "createdAt": "2026-08-26",
       "version": 1
+    },
+    {
+      "skinId": "cha03",
+      "name": "런닝하는 홉빵",
+      "price": 0,
+      "prestige": false,
+      "description": "런닝하는 홉빵",
+      "localized": {
+        "en": {
+          "name": "Hope-pan",
+          "description": "Hope-pan"
+        }
+      },
+      "createdAt": "2026-08-26",
+      "version": 1
     }
   ]
 }
