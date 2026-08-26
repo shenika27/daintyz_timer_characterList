@@ -16,6 +16,19 @@
       },
       "createdAt": "2026-08-26T21:30:11",
       "version": 2
+    },
+    {
+      "skinId": "cha08",
+      "name": "cha08",
+      "price": 0,
+      "prestige": false,
+      "localized": {
+        "en": {
+          "name": "cha08"
+        }
+      },
+      "createdAt": "2026-08-26T21:30:11",
+      "version": 1
     }
   ]
 }
