@@ -3,21 +3,6 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
-      "skinId": "cha06",
-      "name": "cha06",
-      "price": 0,
-      "prestige": false,
-      "description": "cha06",
-      "localized": {
-        "en": {
-          "name": "cha06",
-          "description": "cha06"
-        }
-      },
-      "createdAt": "2026-08-26T19:00:54",
-      "version": 2
-    },
-    {
       "skinId": "cha07",
       "name": "cha07",
       "price": 0,
