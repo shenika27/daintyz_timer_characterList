@@ -200,7 +200,7 @@
 <body>
 <header>
   <h1>🎨 캐릭터 타이머 스킨 빌더</h1>
-  <p>아래 항목을 채우고 <b>[zip 만들기]</b> → <b>[업로드]</b> 두 단계면 끝입니다. 나머지(배치·등록)는 자동으로 처리돼요.</p>
+  <p>아래 항목을 채우고 <b>[⬆ 자동 업로드]</b> 한 번이면 끝입니다. (또는 <b>[⬇ zip 만들기]</b>로 받아 <b>[📤 직접 업로드]</b>) 나머지(배치·등록)는 자동으로 처리돼요.</p>
 </header>
 
 <main>
@@ -393,10 +393,12 @@
 <footer>
   <div class="status" id="status"></div>
   <button class="btn-make" id="makeBtn">⬇ zip 만들기</button>
+  <button class="btn-upload" id="autoUploadBtn"
+     title="zip을 만들어 _inbox에 곧바로 올립니다(최초 1회 비번 입력).">⬆ 자동 업로드</button>
   <a class="btn-upload" id="uploadLink"
      href="https://github.com/shenika27/daintyz_timer_characterList/upload/main/_inbox"
      target="_blank" rel="noopener"
-     title="새 탭에서 업로드 페이지가 열립니다. 받은 파일을 끌어다 놓고 Commit 하면 자동 처리됩니다.">📤 업로드</a>
+     title="새 탭에서 GitHub 업로드 페이지가 열립니다. 받은 zip을 끌어다 놓고 Commit 하면 자동 처리됩니다.">📤 직접 업로드</a>
 </footer>
 
 <script>
@@ -921,12 +923,15 @@ function refresh() {
 
   const status = document.getElementById("status");
   const btn = document.getElementById("makeBtn");
+  const autoBtn = document.getElementById("autoUploadBtn");
   if (errors.length) {
     status.innerHTML = `<span class="errs">⚠ ${errors[0]}${errors.length > 1 ? ` (외 ${errors.length - 1}건)` : ""}</span>`;
     btn.disabled = true;
+    if (autoBtn) autoBtn.disabled = true;
   } else {
     status.textContent = `준비 완료 → ${skinId}.zip`;
     btn.disabled = false;
+    if (autoBtn) autoBtn.disabled = false;
   }
 }
 
@@ -953,50 +958,72 @@ async function buildCharacterZipBlob(json, skinId) {
      character/preview/{skinId}/prev01.png …
      catalog_entry.json           ← catalog.json "skins"에 병합할 항목
    Action(apply-skin-bundle)이 이 구조를 그대로 레포에 펼치고 catalog만 병합한다. */
-async function makeZip() {
+// 번들 blob 생성(검증 포함). 실패 시 null. makeZip(다운로드)·autoUpload(원클릭) 공용.
+async function buildBundleBlob() {
   const { json, errors, skinId } = buildSkinJson();
-  if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return; }
+  if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return null; }
 
+  const bundle = new JSZip();
+
+  // 1) 캐릭터 zip 중첩
+  const charBlob = await buildCharacterZipBlob(json, skinId);
+  bundle.file(`character/zip/${skinId}.zip`, charBlob);
+
+  // 2) 미리보기 (PNG로 재인코딩)
+  const prevDir = bundle.folder(`character/preview/${skinId}`);
+  prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
+  for (let i = 0; i < previewFrames.length; i++) {
+    prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
+  }
+
+  // 3) catalog 병합용 항목
+  bundle.file("catalog_entry.json", JSON.stringify(buildCatalogEntry(), null, 2));
+
+  const blob = await bundle.generateAsync({ type: "blob", compression: "DEFLATE" });
+  return { blob, skinId };
+}
+
+// ① ⬇ zip 만들기 — 파일로 다운로드(수동 업로드용, 기존 방식).
+async function makeZip() {
   const btn = document.getElementById("makeBtn");
+  const orig = btn.textContent;
   btn.disabled = true; btn.textContent = "압축 중…";
   try {
-    const bundle = new JSZip();
-
-    // 1) 캐릭터 zip 중첩
-    const charBlob = await buildCharacterZipBlob(json, skinId);
-    bundle.file(`character/zip/${skinId}.zip`, charBlob);
-
-    // 2) 미리보기 (PNG로 재인코딩)
-    const prevDir = bundle.folder(`character/preview/${skinId}`);
-    prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
-    for (let i = 0; i < previewFrames.length; i++) {
-      prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
-    }
-
-    // 3) catalog 병합용 항목
-    bundle.file("catalog_entry.json", JSON.stringify(buildCatalogEntry(), null, 2));
-
-    const blob = await bundle.generateAsync({ type: "blob", compression: "DEFLATE" });
-    if (inboxReady()) {
-      btn.textContent = "업로드 중…";
-      const ok = await commitToInbox(`${skinId}.zip`, blob, `chore(skin): _inbox/${skinId}.zip (빌더 업로드)`);
-      if (ok) {
-        document.getElementById("status").innerHTML =
-          `✅ <b>${skinId}.zip</b> 업로드 완료 → 1~2분 뒤 Actions에서 상점에 자동 반영됩니다.`;
-      }
-    } else {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${skinId}.zip`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      document.getElementById("status").innerHTML =
-        `✅ <b>${skinId}.zip</b> 저장됨 → <b>📤 업로드</b>를 눌러 끌어다 놓으세요.`;
-    }
+    const r = await buildBundleBlob();
+    if (!r) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(r.blob);
+    a.download = `${r.skinId}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    document.getElementById("status").innerHTML =
+      `✅ <b>${r.skinId}.zip</b> 저장됨 → <b>📤 직접 업로드</b>로 올리거나 <b>⬆ 자동 업로드</b>를 쓰세요.`;
   } catch (e) {
     alert("zip 생성 중 오류: " + e.message);
   } finally {
-    btn.textContent = inboxReady() ? "⬆ 업로드 (원클릭)" : "⬇ zip 만들기"; btn.disabled = false;
+    btn.textContent = orig; btn.disabled = false;
+  }
+}
+
+// ② ⬆ 자동 업로드 — Worker로 _inbox에 곧바로 커밋(원클릭).
+async function autoUpload() {
+  if (!inboxReady()) { alert("자동 업로드가 설정되지 않았습니다. '📤 직접 업로드'를 사용하세요."); return; }
+  const btn = document.getElementById("autoUploadBtn");
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = "압축 중…";
+  try {
+    const r = await buildBundleBlob();
+    if (!r) return;
+    btn.textContent = "업로드 중…";
+    const ok = await commitToInbox(`${r.skinId}.zip`, r.blob, `chore(skin): _inbox/${r.skinId}.zip (빌더 업로드)`);
+    if (ok) {
+      document.getElementById("status").innerHTML =
+        `✅ <b>${r.skinId}.zip</b> 업로드 완료 → 1~2분 뒤 Actions에서 상점에 자동 반영됩니다.`;
+    }
+  } catch (e) {
+    alert("업로드 중 오류: " + e.message);
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
   }
 }
 
@@ -1489,16 +1516,11 @@ document.getElementById("createdAt").value = todayLocal();
 document.getElementById("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
 document.getElementById("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
 document.getElementById("makeBtn").addEventListener("click", makeZip);
-// 원클릭(Worker 연결)이면: 헷갈리는 수동 '📤 업로드' 링크는 숨기고,
-// 'zip 만들기' 버튼을 곧바로 업로드하는 버튼으로 이름을 바꿔 한 버튼으로 통일한다.
-if (inboxReady()) {
-  const up = document.getElementById("uploadLink");
-  if (up) up.style.display = "none";
-  const mk = document.getElementById("makeBtn");
-  if (mk) mk.textContent = "⬆ 업로드 (원클릭)";
-  const guide = document.querySelector("header p");
-  if (guide) guide.innerHTML =
-    "아래 항목을 채우고 <b>[업로드]</b> 버튼만 누르면 끝입니다. 나머지(배치·등록)는 자동으로 처리돼요.";
+document.getElementById("autoUploadBtn").addEventListener("click", autoUpload);
+// 자동 업로드(Worker)가 설정 안 됐으면 그 버튼은 숨긴다(직접 업로드만 사용).
+if (!inboxReady()) {
+  const au = document.getElementById("autoUploadBtn");
+  if (au) au.style.display = "none";
 }
 refresh();
 updateLifetimePassCodeHint();
