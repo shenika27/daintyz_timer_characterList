@@ -3,66 +3,6 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
-      "skinId": "cha02",
-      "name": "홉빵이",
-      "price": 0,
-      "prestige": false,
-      "description": "런닝머신 뛰는 홉빵",
-      "localized": {
-        "en": {
-          "name": "Hope-pan",
-          "description": "Hape-pan running on the treadmill"
-        }
-      },
-      "createdAt": "2026-08-26",
-      "version": 1
-    },
-    {
-      "skinId": "cha03",
-      "name": "런닝하는 홉빵",
-      "price": 0,
-      "prestige": false,
-      "description": "런닝하는 홉빵",
-      "localized": {
-        "en": {
-          "name": "Hope-pan",
-          "description": "Hope-pan"
-        }
-      },
-      "createdAt": "2026-08-26",
-      "version": 1
-    },
-    {
-      "skinId": "cha04",
-      "name": "h",
-      "price": 0,
-      "prestige": false,
-      "description": "h",
-      "localized": {
-        "en": {
-          "name": "h",
-          "description": "h"
-        }
-      },
-      "createdAt": "2026-08-26T17:15:15",
-      "version": 1
-    },
-    {
-      "skinId": "cha05",
-      "name": "cha05",
-      "price": 0,
-      "prestige": false,
-      "description": "h",
-      "localized": {
-        "en": {
-          "name": "cha05",
-          "description": "h"
-        }
-      },
-      "createdAt": "2026-08-26T17:15:15",
-      "version": 1
-    },
-    {
       "skinId": "cha06",
       "name": "cha06",
       "price": 0,
@@ -90,7 +30,7 @@
         }
       },
       "createdAt": "2026-08-26T21:30:11",
-      "version": 1
+      "version": 2
     }
   ]
 }
