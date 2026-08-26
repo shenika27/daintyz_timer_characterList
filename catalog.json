@@ -31,6 +31,21 @@
       },
       "createdAt": "2026-08-26",
       "version": 1
+    },
+    {
+      "skinId": "cha04",
+      "name": "h",
+      "price": 0,
+      "prestige": false,
+      "description": "h",
+      "localized": {
+        "en": {
+          "name": "h",
+          "description": "h"
+        }
+      },
+      "createdAt": "2026-08-26T17:15:15",
+      "version": 1
     }
   ]
 }
