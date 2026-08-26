@@ -234,7 +234,7 @@
         <input type="text" id="descriptionEn" placeholder="A bunny hopping over the moon" autocomplete="off"></label>
     </div>
     <div class="grid" style="margin-top:12px">
-      <label class="field"><span>출시일 (생성일 자동 — NEW 배지 +7일 기준)</span>
+      <label class="field"><span>출시일시 (생성 시각 자동 — 창고 출시순 정렬 · NEW 배지 +7일 기준)</span>
         <input type="text" id="createdAt" readonly tabindex="-1"
                style="background:var(--bg);color:var(--sub);cursor:not-allowed" autocomplete="off"></label>
     </div>
@@ -1180,7 +1180,7 @@ async function loadSkinForEdit(entry) {
     document.getElementById("saleEnd").value = entry.saleEnd || "";
     document.getElementById("description").value = entry.description || skinJson.description || "";
     document.getElementById("descriptionEn").value = entry.localized?.en?.description || skinJson.localized?.en?.description || "";
-    document.getElementById("createdAt").value = entry.createdAt || skinJson.createdAt || todayLocal();
+    document.getElementById("createdAt").value = entry.createdAt || skinJson.createdAt || nowLocalDateTime();
     // 3) 캐릭터 프레임
     const ch = skinJson.character || {};
     await loadFrameSetInto(zip, prefix, "stop", ch.stop);
@@ -1508,13 +1508,15 @@ buildAssetSlot("font", "숫자 폰트(.ttf)", ".ttf,font/ttf,application/octet-s
 buildThumbSlot();
 buildPrevList();
 
-// 오늘 날짜(로컬 yyyy-mm-dd).
-function todayLocal() {
+// 현재 로컬 일시(yyyy-mm-ddThh:mm:ss). 창고 출시순 정렬이 같은 날 스킨도 초 단위로 구분하도록
+// 출시일(createdAt)에 시각까지 담는다. 사전식 비교가 곧 시간순이라 문자열 내림차순 정렬과 호환된다.
+// 앱은 날짜 부분('T' 앞)만 잘라 NEW 배지를 판정하므로 기존 날짜-only 항목과도 하위호환.
+function nowLocalDateTime() {
   const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
 }
-// 출시일은 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
-document.getElementById("createdAt").value = todayLocal();
+// 출시일시는 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
+document.getElementById("createdAt").value = nowLocalDateTime();
 
 ["skinId", "name", "nameEn", "price", "prestige", "hidden", "saleEnd", "description", "descriptionEn", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
   const el = document.getElementById(id);
