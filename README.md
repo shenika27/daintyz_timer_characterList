@@ -481,6 +481,24 @@ node scripts/create-user.mjs daintyz-admin
 
 명령이 출력한 SQL 전체를 Cloudflare 대시보드의 `D1 → daintyz-timerwidget → Console`에서 실행합니다. 그다음 Worker를 배포합니다.
 
+#### 비밀번호를 잊었을 때
+
+비밀번호 원문은 D1에 저장하지 않으므로 기존 비밀번호를 조회하거나 복구할 수 없습니다. 계정 생성 도구로 같은 아이디의 비밀번호를 새 값으로 재설정합니다.
+
+```powershell
+cd worker
+node scripts/create-user.mjs daintyz-admin
+```
+
+1. 새 비밀번호를 두 번 입력합니다.
+2. 출력된 SQL 전체를 복사합니다.
+3. Cloudflare 대시보드에서 `D1 → daintyz-timerwidget → Console`을 엽니다.
+4. SQL을 붙여넣고 실행합니다.
+
+출력 SQL은 `INSERT ... ON CONFLICT(username) DO UPDATE` 방식입니다. `daintyz-admin`이 이미 있으면 중복 계정을 만들지 않고 `password_salt`, `password_hash`, `password_iterations`를 갱신하며, 기존 로그인 세션을 모두 삭제합니다.
+
+> D1 Console에서 `password_hash`, `password_salt`, `password_iterations`를 각각 직접 수정하지 마세요. 세 값이 서로 맞지 않으면 로그인할 수 없습니다. 반드시 계정 생성 도구가 출력한 SQL 전체를 실행해야 하며, `password_iterations`는 Cloudflare Workers가 지원하는 `100000`이어야 합니다.
+
 ```powershell
 npx wrangler secret list
 # GITHUB_TOKEN이 없을 때만: npx wrangler secret put GITHUB_TOKEN
