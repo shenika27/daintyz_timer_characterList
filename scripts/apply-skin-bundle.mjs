@@ -174,11 +174,11 @@ for (const zip of zips) {
   if (idx >= 0) {
     const prevVer = Number(catalog.skins[idx].version) || 1;
     entry.version = prevVer + 1; // 재업로드 = 변경 → 버전 올림
-    const previousGiftHashes = Array.isArray(catalog.skins[idx].giftCodeHashes)
-      ? catalog.skins[idx].giftCodeHashes
+    const previousGiftCodes = Array.isArray(catalog.skins[idx].giftCodes)
+      ? catalog.skins[idx].giftCodes
       : [];
-    if (!Array.isArray(entry.giftCodeHashes) && previousGiftHashes.length > 0) {
-      entry.giftCodeHashes = previousGiftHashes;
+    if (!Array.isArray(entry.giftCodes) && previousGiftCodes.length > 0) {
+      entry.giftCodes = previousGiftCodes;
     }
     if (!entry.localized && catalog.skins[idx].localized) {
       entry.localized = catalog.skins[idx].localized;
@@ -273,7 +273,7 @@ for (const marker of passCodeMarkers) {
     const hash = String(code.hash || "").trim().toLowerCase();
     const expiresAt = String(code.expiresAt || "").trim();
     const maxUses = Math.max(0, Number(code.maxUses) || 0);
-    if (!/^[a-f0-9]{64}$/.test(hash) || !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+    if (!/^[a-f0-9]{64}$/.test(hash) || (expiresAt && !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt))) {
       log(`  ! ${marker}: 평생이용권 코드 형식 오류 — 건너뜀`);
       continue;
     }
@@ -281,7 +281,7 @@ for (const marker of passCodeMarkers) {
       log(`  ! ${marker}: 평생이용권 maxUses는 1 또는 생략만 허용 — 건너뜀`);
       continue;
     }
-    const next = { hash, expiresAt, ...(maxUses > 0 ? { maxUses } : {}) };
+    const next = { hash, maxUses, ...(expiresAt ? { expiresAt } : {}) };
     const idx = catalog.lifetimePassGiftCodes.findIndex(c => c.hash === hash);
     if (idx >= 0) catalog.lifetimePassGiftCodes[idx] = next;
     else catalog.lifetimePassGiftCodes.push(next);
@@ -297,7 +297,7 @@ if (passCodesApplied > 0) {
   log(`  → 평생이용권 코드 ${passCodesApplied}개 병합`);
 }
 
-// 개별 테마 코드 마커(_inbox/*.skin-gift-codes.json) 처리: catalog.skins[].giftCodeHashes에 병합.
+// 개별 테마 코드 마커(_inbox/*.skin-gift-codes.json) 처리: catalog.skins[].giftCodes에 병합.
 let skinCodesApplied = 0;
 for (const marker of skinCodeMarkers) {
   const markerPath = path.join(INBOX, marker);
@@ -314,8 +314,18 @@ for (const marker of skinCodeMarkers) {
   for (const code of codes) {
     const skinId = String(code.skinId || "").trim();
     const hash = String(code.hash || "").trim().toLowerCase();
+    const expiresAt = String(code.expiresAt || "").trim();
+    const maxUses = Math.max(0, Number(code.maxUses) || 0);
     if (!/^[A-Za-z0-9_]+$/.test(skinId) || !/^[a-f0-9]{64}$/.test(hash)) {
       log(`  ! ${marker}: 개별 테마 코드 형식 오류 — 건너뜀`);
+      continue;
+    }
+    if (expiresAt && !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+      log(`  ! ${marker}: 개별 테마 expiresAt 형식 오류 — 건너뜀`);
+      continue;
+    }
+    if (maxUses !== 0 && maxUses !== 1) {
+      log(`  ! ${marker}: 개별 테마 maxUses는 0 또는 1만 허용 — 건너뜀`);
       continue;
     }
     const entry = catalog.skins.find(s => s.skinId === skinId);
@@ -323,11 +333,12 @@ for (const marker of skinCodeMarkers) {
       log(`  ! ${marker}: catalog에 skinId=${skinId} 없음 — 건너뜀`);
       continue;
     }
-    const hashes = Array.isArray(entry.giftCodeHashes) ? entry.giftCodeHashes : [];
-    if (!hashes.includes(hash)) {
-      entry.giftCodeHashes = hashes.concat(hash).sort();
-      skinCodesApplied++;
-    }
+    const giftCodes = Array.isArray(entry.giftCodes) ? entry.giftCodes : [];
+    const next = { hash, maxUses, ...(expiresAt ? { expiresAt } : {}) };
+    const codeIdx = giftCodes.findIndex(c => c && c.hash === hash);
+    if (codeIdx >= 0) giftCodes[codeIdx] = next; else giftCodes.push(next);
+    entry.giftCodes = giftCodes.sort((a, b) => String(a.hash || "").localeCompare(String(b.hash || "")));
+    skinCodesApplied++;
   }
   fs.rmSync(markerPath, { force: true });
 }

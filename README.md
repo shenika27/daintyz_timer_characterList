@@ -21,7 +21,9 @@ docs/index.html                 ← 🎨 로그인 기반 스킨빌더 (자동 �
 _inbox/                         ← 빌더가 올린 번들/마커 처리함 (Action이 처리 후 비움)
 .github/workflows/skin-deploy.yml ← _inbox 번들 자동 배치 워크플로
 scripts/apply-skin-bundle.mjs   ← 번들 풀기 + catalog 병합 스크립트
+scripts/sync-play-products.mjs  ← 유료 스킨 Play 인앱상품(SKU) 등록/수정/비활성화 (PART 3)
 catalog.json                    ← 앱이 읽는 테마 목록 (+ baseUrl)
+_retired_ids.json               ← 삭제된 skinId/productId 원장 (재사용 감지·차단용, PART 3 참고)
 character/                      ← 테마 에셋 묶음
   zip/{skinId}.zip              ← 테마 한 세트 (skin.json + 캐릭터·타이머 PNG들)
   preview/{skinId}/thumb.png    ← 테마 썸네일 (상점 목록 + 앱 '타이머' 탭 공용)
@@ -440,6 +442,8 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 
 1. 배포된 **스킨빌더**(`https://shenika27.github.io/daintyz_timer_characterList/`) 열기
 2. 운영자가 발급한 아이디와 비밀번호로 로그인
+   - `자동로그인(30일)`을 선택하면 브라우저를 닫았다 열어도 로그인 상태가 유지됩니다.
+   - 비밀번호와 세션 토큰은 Web Storage에 저장하지 않고 HttpOnly 쿠키로 관리합니다.
 3. 캐릭터 상태별 이미지 + 타이머 배경/버튼/폰트 + **썸네일·미리보기** + 기본정보(이름·가격·부제·출시일) 입력
    - 영어 이름/설명(`localized.en`)을 넣으면 앱 언어가 English일 때 해당 문구가 우선 표시됩니다.
    - `상점에 노출 안 함(숨김)`은 catalog에는 남기되 상점 노출만 숨길 때 씁니다.
@@ -460,6 +464,18 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 
 > 로그인 화면은 정적 GitHub Pages의 진입 UI를 잠그고, 실제 보호가 필요한 자동 업로드는 Worker가 서버 측에서 인증합니다. GitHub Pages의 HTML 소스 자체를 비공개로 만드는 구조는 아닙니다.
 
+### 기프트코드 발급·조회
+
+스킨빌더 운영 패널에서 코드 제목, 대상, 기한, 사용 제한을 입력한 뒤 코드를 생성·업로드합니다.
+
+- 개별테마는 출시된 `skinId`를 먼저 선택해야 나머지 입력이 활성화됩니다.
+- 유료 개별테마 코드는 수동 입력할 수 없으며 안전한 난수 자동생성만 허용합니다.
+- 무료 개별테마 코드는 수동 입력도 가능하고 자동생성을 권장합니다.
+- `무제한`은 코드 1개, `1회 소진`은 최대 100개를 한 배치로 생성합니다.
+- 업로드가 성공하면 코드 제목·대상·사용제한·개수·만료일·발급일이 비공개 D1 원장에 기록됩니다.
+- 운영 패널의 **발급한 코드 목록**에서 이전 발급 제목과 메타데이터를 조회하거나 새로고침할 수 있습니다.
+- 코드 원문과 해시는 발급 원장에 저장하지 않으므로 생성한 실제 코드는 별도로 안전하게 보관해야 합니다.
+
 ### 출시된 스킨 수정/삭제
 
 스킨빌더 오른쪽의 **출시된 스킨** 목록은 `catalog.json`과 기존 zip/preview를 불러와 수정용 폼으로 복원합니다.
@@ -468,6 +484,21 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 - 목록의 삭제 버튼으로 확인하면 `{skinId}.delete.json` 삭제 마커가 자동 업로드됩니다. 수동 방식을 선택한 경우에만 마커 파일을 `_inbox`에 직접 올립니다. 처리되면
   `character/zip/{skinId}.zip`, `character/preview/{skinId}/`, `catalog.json` 항목이 정리됩니다.
 - 삭제 마커에 `productId`가 있으면 catalog 항목이 이미 사라진 상태에서도 해당 Play SKU를 `inactive`로 비활성화할 수 있습니다.
+
+### 삭제된 id 원장 (`_retired_ids.json`) — skinId/productId 재사용 차단 ★
+
+삭제된 `skinId`/`productId`를 다시 쓰면 **옛 보유자·구매자에게 새 스킨이 잘못 풀리는 사고**가 날 수 있어,
+워크플로우가 삭제 이력을 원장에 남겨 재사용을 감지·차단합니다(`scripts/apply-skin-bundle.mjs`, `scripts/sync-play-products.mjs`).
+
+- **적립**: 스킨을 삭제(`.delete.json`)하면 `_retired_ids.json`의 `retired[]`에 `{skinId, productId?, retiredAt}`가
+  쌓입니다. **무료·유료 모두** 기록합니다(이 원장은 커밋 대상 — 재실행/이력 추적용).
+- **skinId 재사용 감지**: 삭제된 적 있는 `skinId`가 다시 올라오면 Actions 로그에 **경고**가 찍힙니다(차단은 아님).
+  옛 스킨을 보유했던 사용자 화면에 새 스킨이 잘못 '보유'로 뜰 수 있어 새 id 사용을 권장합니다.
+- **productId 재사용 하드 차단**: catalog에 **처음 등장하는 스킨(`isNew`)** 이 **이미 Play에 존재하는 `productId`** 를
+  쓰려 하면 동기화가 **실패로 중단**됩니다 — 과거 구매 이력이 남은 SKU를 새 스킨에 붙이면 옛 구매자가 무료로 언락하기 때문.
+  - 같은 스킨의 수정·재업로드는 `isNew=false`라 걸리지 않습니다(정상 수정 경로).
+  - 정당한 재시도(예: SKU는 만들어졌는데 catalog 커밋만 실패)일 때만 워크플로 env `ALLOW_PRODUCT_ID_REUSE=1`로 강행합니다.
+- **원칙**: 삭제한 `skinId`/`productId`는 **재활용하지 말고 새 id를 쓰세요.**
 
 ### 유료 스킨 → Play 인앱상품 자동 등록
 
@@ -479,6 +510,7 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 - **이미 있는 상품은 기존 상태를 보존**합니다(활성 상품을 비활성으로 되돌리지 않음). 가격·이름만 갱신.
 - 빌더에서 스킨을 삭제하면 해당 SKU는 **하드 삭제 대신 비활성화**됩니다(구매 이력 보존).
 - 무료 전용 업로드면 이 단계는 통째로 건너뜁니다(토큰 없이도 무료 파이프라인 정상 동작).
+- 처음 등장하는 스킨이 **이미 존재하는 `productId`를 재사용하면 기본 차단**됩니다(위 [삭제된 id 원장](#삭제된-id-원장-_retired_idsjson--skinidproductid-재사용-차단-) 참고).
 
 **최초 1회 셋업(로그인 필요):**
 1. 결제 Worker에 쓰는 그 GCP 서비스계정 JSON을, **이 레포** GitHub → Settings ▸ Secrets and variables ▸ Actions →
@@ -488,7 +520,8 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
    - 정확한 토글이 불확실하면 일단 올려 보세요. 권한이 부족하면 Actions 로그에 Google이 돌려준
      `403` 메시지가 그대로 찍히고 **catalog 커밋은 차단**되므로(깨진 상태 방지), 그 메시지를 보고 권한을 맞추면 됩니다.
 
-> 패키지명·초기 상태는 워크플로우 env(`ANDROID_PACKAGE_NAME`, `PLAY_PRODUCT_STATUS`)에서 바꿉니다.
+> **워크플로우 env**: `ANDROID_PACKAGE_NAME`(패키지명), `PLAY_PRODUCT_STATUS`(신규 상품 초기 상태, 기본 `inactive`),
+> `PLAY_PRICE_CURRENCY`(기준 통화, 기본 `KRW`), `ALLOW_PRODUCT_ID_REUSE`(=`1`이면 productId 재사용 차단 강행 해제).
 > 신규 상품을 처음부터 활성으로 만들고 싶으면 `PLAY_PRODUCT_STATUS: active`로 바꾸세요(권장하지 않음).
 
 ### 기프트코드 마커
@@ -498,9 +531,10 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 
 - **평생이용권 코드**: `lifetime-pass-{expiresAt}.lifetime-pass-codes.json`
   - catalog 최상위 `lifetimePassGiftCodes`에 `{hash, expiresAt, maxUses?}` 형태로 병합됩니다.
-  - `maxUses`는 생략/0이면 제한 없음, `1`이면 1회 소진 코드입니다. 그 외 값은 무시됩니다.
+  - `maxUses`는 `0`이면 제한 없음, `1`이면 1회 소진 코드입니다. 그 외 값은 무시됩니다.
 - **개별 테마 코드**: `{skinId}.skin-gift-codes.json`
-  - 해당 테마의 `giftCodeHashes` 배열에 코드 해시를 병합합니다.
+  - 해당 테마의 `giftCodes` 배열에 `{hash, maxUses, expiresAt?}`를 병합합니다.
+  - 앱은 공개 catalog에서 직접 코드를 판정하지 않고 API Worker에서 만료·소진을 검증합니다.
   - catalog에 없는 `skinId`면 적용하지 않고 건너뜁니다.
 
 ---
@@ -564,7 +598,7 @@ character/preview/newchar/prev02.png   (미리보기 2, 필요시 prev03 …)
 | `saleEnd` | string | ❌ | 판매 종료일 `"yyyy-MM-dd"`(당일 포함). 종료일이 지나면 기간만료로 표시하고 신규 구매를 막음 |
 | `description` | string | ❌ | 상점 히어로 카드 부제(한 줄). 생략 시 부제 줄 생략 |
 | `localized` | object | ❌ | 언어별 이름/설명. 현재 빌더는 `localized.en.name`, `localized.en.description`을 생성 |
-| `giftCodeHashes` | string[] | ❌ | 개별 테마 기프트코드 해시 목록. 스킨빌더의 `.skin-gift-codes.json` 마커로 병합 권장 |
+| `giftCodes` | array | ❌ | 개별 테마 기프트코드 목록. 각 항목은 `{hash, maxUses, expiresAt?}`이며 스킨빌더 마커로 병합 권장 |
 | `createdAt` | string | ❌ | 출시일 `"yyyy-MM-dd"`. 상점 NEW 배지 판정(출시일+7일 이내). 생략 시 NEW 안 뜸 |
 | `version` | number | ❌ | 테마 버전(사람이 보는 체인지로그용 — 앱 동작엔 미사용). 스킨빌더 자동배치 시 재업로드면 +1 됨 |
 

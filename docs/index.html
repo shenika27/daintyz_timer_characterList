@@ -46,6 +46,8 @@
   }
   #loginBtn:hover { background: var(--accent-d); }
   #loginBtn:disabled { background: #aeb8dd; cursor: wait; }
+  .login-check { display:flex !important; align-items:center; gap:8px; margin-top:14px !important; font-weight:500 !important; }
+  .login-check input { width:auto; margin:0; }
   #loginError { min-height: 20px; margin: 10px 0 0; color: var(--danger); font-size: 12.5px; }
   header {
     background: var(--card); border-bottom: 1px solid var(--line);
@@ -133,6 +135,13 @@
   .pick-sm { padding: 3px 9px; font-size: 12px; }
   /* 해금 코드 라벨 + 우측 상단 '자동 생성' 버튼을 한 줄에 */
   label.field > span.codes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .gift-issued { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .gift-issued-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .gift-issued-head h4 { margin:0; font-size:14px; }
+  .gift-issued-list { margin-top:9px; display:grid; gap:8px; }
+  .gift-issued-item { padding:10px 11px; border:1px solid var(--line); border-radius:9px; background:var(--bg); }
+  .gift-issued-title { font-weight:800; color:var(--ink); }
+  .gift-issued-meta { margin-top:4px; color:var(--sub); font-size:12px; line-height:1.55; }
   .clear-x { border:none; background:none; color: var(--danger); cursor:pointer; font-size: 18px; padding: 0 4px; }
 
   details.opt { border: 1px solid var(--line); border-radius: 10px; padding: 0; margin-top: 6px; }
@@ -264,6 +273,9 @@
     <input type="text" id="loginUsername" autocomplete="username" maxlength="64" required>
     <label for="loginPassword">비밀번호</label>
     <input type="password" id="loginPassword" autocomplete="current-password" maxlength="1024" required>
+    <label class="login-check" for="loginRemember">
+      <input type="checkbox" id="loginRemember"> 자동로그인 (30일)
+    </label>
     <button type="submit" id="loginBtn">로그인</button>
     <p id="loginError" role="alert" aria-live="polite"></p>
   </form>
@@ -441,9 +453,11 @@
                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="giftSkinComboList">
           <ul class="combo-list" id="giftSkinComboList" role="listbox"></ul>
         </div></label>
+      <label class="field"><span>코드명/라벨</span>
+        <input type="text" id="giftLabel" maxlength="100" placeholder="예: 달토끼 쿠폰" autocomplete="off"></label>
       <label class="field"><span>코드 자동 생성 개수</span>
         <input type="number" id="lifetimePassGenerateCount" min="1" max="100" step="1" value="10" autocomplete="off"></label>
-      <label class="field" id="giftExpiresField"><span>입력 가능 기한 <b style="color:var(--danger)">*</b></span>
+      <label class="field" id="giftExpiresField"><span>입력 가능 기한 (비우면 무기한)</span>
         <input type="date" id="lifetimePassExpiresAt" autocomplete="off"></label>
       <label class="field" id="giftUsageField"><span>사용 제한</span>
         <select id="lifetimePassUsageLimit">
@@ -459,7 +473,15 @@
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="pick" id="makeLifetimePassMarker" type="button">JSON 만들기</button>
       <button class="pick" id="uploadLifetimePassMarker" type="button">코드 업로드</button>
+      <button class="pick" id="retryGiftRegistry" type="button" hidden>원장 등록 재시도</button>
     </div>
+    <section class="gift-issued" id="giftRegistryPanel" aria-labelledby="giftRegistryTitle">
+      <div class="gift-issued-head">
+        <h4 id="giftRegistryTitle">발급한 코드 목록</h4>
+        <button class="pick pick-sm" id="refreshGiftRegistry" type="button">새로고침</button>
+      </div>
+      <div id="giftRegistryList" class="gift-issued-list" aria-live="polite">목록을 불러오는 중입니다.</div>
+    </section>
   </div>
 </aside>
 <button id="opsReopen" type="button" title="운영 도구 열기">운영도구</button>
@@ -1192,22 +1214,10 @@ const RAW_BASE = "https://raw.githubusercontent.com/shenika27/daintyz_timer_char
 
 /* ---------- 로그인 + _inbox 원클릭 커밋 (Cloudflare Worker 경유) ---------- */
 const INBOX_API_URL = "https://daintyz-skin-inbox.xornexon.workers.dev"; // _inbox 커밋 프록시 Worker
-const AUTH_TOKEN_KEY = "skinBuilderSession";
 
 function inboxReady() { return !!INBOX_API_URL; }
 
-function getAuthToken() {
-  try { return sessionStorage.getItem(AUTH_TOKEN_KEY) || ""; }
-  catch { return ""; }
-}
-function setAuthToken(token) {
-  try { sessionStorage.setItem(AUTH_TOKEN_KEY, token); } catch {}
-}
-function clearAuthToken() {
-  try { sessionStorage.removeItem(AUTH_TOKEN_KEY); } catch {}
-}
 function showLogin(message = "") {
-  clearAuthToken();
   document.body.classList.add("auth-pending");
   document.getElementById("loginGate").hidden = false;
   document.getElementById("loginError").textContent = message;
@@ -1218,18 +1228,19 @@ function showBuilder(username) {
   document.getElementById("authUsername").textContent = `${username}님`;
   document.getElementById("loginGate").hidden = true;
   document.body.classList.remove("auth-pending");
+  loadGiftRegistry();
 }
 async function initializeAuth() {
   // 이전 단일 비밀번호 방식에서 남은 브라우저 저장값을 제거한다.
-  try { localStorage.removeItem("inboxKey"); } catch {}
-  const token = getAuthToken();
-  if (!token) { showLogin(); return; }
+  try { localStorage.removeItem("inboxKey"); localStorage.removeItem("skinBuilderSession"); } catch {}
+  try { sessionStorage.removeItem("skinBuilderSession"); } catch {}
   try {
     const res = await fetch(`${INBOX_API_URL}/auth/session`, {
-      method: "GET", headers: { "Authorization": `Bearer ${token}` }, cache: "no-store",
+      method: "GET", credentials: "include", cache: "no-store",
     });
     const data = await res.json();
     if (res.ok && data.ok) { showBuilder(data.username); return; }
+    if (res.status === 401 && data.reason === "missing") { showLogin(); return; }
   } catch {}
   showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
 }
@@ -1244,11 +1255,12 @@ async function submitLogin(event) {
       body: JSON.stringify({
         username: document.getElementById("loginUsername").value.trim(),
         password: document.getElementById("loginPassword").value,
+        rememberMe: document.getElementById("loginRemember").checked,
       }),
+      credentials: "include",
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || "로그인에 실패했습니다.");
-    setAuthToken(data.token);
     document.getElementById("loginPassword").value = "";
     showBuilder(data.username);
   } catch (e) {
@@ -1258,15 +1270,10 @@ async function submitLogin(event) {
   }
 }
 async function logout() {
-  const token = getAuthToken();
   showLogin("로그아웃되었습니다.");
-  if (token) {
-    try {
-      await fetch(`${INBOX_API_URL}/auth/logout`, {
-        method: "POST", headers: { "Authorization": `Bearer ${token}` },
-      });
-    } catch {}
-  }
+  try {
+    await fetch(`${INBOX_API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  } catch {}
 }
 
 // Blob → base64 문자열(데이터URL 접두사 제거).
@@ -1282,13 +1289,12 @@ function blobToBase64(blob) {
 // _inbox/<filename> 로 파일 하나를 커밋. 성공 true / 실패 false.
 async function commitToInbox(filename, blob, message) {
   const contentBase64 = await blobToBase64(blob);
-  const token = getAuthToken();
-  if (!token) { showLogin("로그인이 필요합니다."); return false; }
   let res, data;
   try {
     res = await fetch(`${INBOX_API_URL}/inbox`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ path: `_inbox/${filename}`, contentBase64, message }),
     });
     data = await res.json();
@@ -1578,7 +1584,7 @@ function renderReleased() {
         `${s.prestige ? ' <span class="rel-badge">✦</span>' : ""}` +
         `${s.hidden ? ' <span class="rel-badge" style="color:var(--sub)">🚫숨김</span>' : ""}` +
         `${s.saleEnd ? ' <span class="rel-badge" style="color:var(--sub)">🕒한정</span>' : ""}` +
-        `${(s.giftCodeHashes && s.giftCodeHashes.length) ? ' <span class="rel-badge" style="color:var(--sub)">🎁코드</span>' : ""}</div>` +
+        `${(s.giftCodes && s.giftCodes.length) ? ' <span class="rel-badge" style="color:var(--sub)">🎁코드</span>' : ""}</div>` +
       `<div class="rel-meta"><code>${escapeHtml(s.skinId || "?")}</code> · ${price}` +
         `${enName ? ` · ${escapeHtml(enName)}` : ""}` +
         `${s.version ? ` · v${s.version}` : ""}` +
@@ -1631,12 +1637,44 @@ function setupReleasedPanel() {
 function randomLifetimePassCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = new Uint8Array(12);
-  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
-  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  if (!window.crypto || !crypto.getRandomValues) throw new Error("안전한 난수 생성 기능을 사용할 수 없습니다.");
+  crypto.getRandomValues(bytes);
   let raw = "";
   for (const b of bytes) raw += alphabet[b % alphabet.length];
   const prefix = document.getElementById("giftTargetType")?.value === "skin" ? "GIFT" : "PASS";
   return `${prefix}-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+let autoGeneratedGiftCodes = new Set();
+let pendingGiftRegistry = null;
+
+function selectedGiftSkin() {
+  const skinId = document.getElementById("giftTargetSkinId").value.trim().toLowerCase();
+  return releasedSkins.find(s => String(s.skinId || "").toLowerCase() === skinId) || null;
+}
+
+function updateGiftControls() {
+  const targetType = document.getElementById("giftTargetType").value;
+  const skinTargetOn = targetType === "skin";
+  const selected = skinTargetOn ? selectedGiftSkin() : null;
+  const gated = skinTargetOn && !selected;
+  const paidSkin = !!selected && Number(selected.price || 0) > 0;
+  const usage = document.getElementById("lifetimePassUsageLimit").value;
+  const count = document.getElementById("lifetimePassGenerateCount");
+  const codes = document.getElementById("lifetimePassCodes");
+  ["giftLabel", "lifetimePassExpiresAt", "lifetimePassUsageLimit", "generateLifetimePassCodes",
+   "makeLifetimePassMarker", "uploadLifetimePassMarker"].forEach(id => {
+    document.getElementById(id).disabled = gated;
+  });
+  count.disabled = gated || usage === "unlimited";
+  if (usage === "unlimited") count.value = "1";
+  codes.disabled = gated;
+  codes.readOnly = paidSkin;
+  codes.placeholder = paidSkin
+    ? "유료 테마 코드는 자동 생성만 사용할 수 있습니다."
+    : "예: PASS-2026-ABCD, VIP-7DAYS";
+  const current = parseGiftCodes(codes.value);
+  if (paidSkin && current.some(code => !autoGeneratedGiftCodes.has(code))) codes.value = "";
 }
 
 function updateLifetimePassCodeHint() {
@@ -1650,8 +1688,7 @@ function updateLifetimePassCodeHint() {
   const bad = codes.filter(c => !/^[A-Z0-9-]+$/.test(c));
   const skinTargetOn = targetType === "skin";
   document.getElementById("giftTargetSkinField").style.display = skinTargetOn ? "" : "none";
-  document.getElementById("giftExpiresField").style.display = skinTargetOn ? "none" : "";
-  document.getElementById("giftUsageField").style.display = skinTargetOn ? "none" : "";
+  updateGiftControls();
   if (!codes.length) {
     hint.textContent = "코드를 입력하거나 자동 생성해 주세요.";
     hint.style.color = "var(--sub)";
@@ -1664,26 +1701,27 @@ function updateLifetimePassCodeHint() {
   } else if (skinTargetOn && releasedSkins.length && !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase())) {
     hint.textContent = `'${skinId}'는 출시된 테마 목록에 없어요 — 목록에서 선택하세요.`;
     hint.style.color = "var(--danger)";
-  } else if (skinTargetOn) {
-    hint.textContent = `${codes.length}개 코드 준비됨 · ${skinId} 테마 해금`;
-    hint.style.color = "var(--ok)";
-  } else if (!expiresAt) {
-    hint.textContent = `${codes.length}개 코드 준비됨 · 입력 가능 기한을 선택해 주세요.`;
+  } else if (!document.getElementById("giftLabel").value.trim()) {
+    hint.textContent = "원장에 표시할 코드명/라벨을 입력해 주세요.";
     hint.style.color = "var(--sub)";
   } else {
-    hint.textContent = `${codes.length}개 코드 준비됨 · ${expiresAt}까지 입력 가능 · ${usageText}`;
+    const targetText = skinTargetOn ? `${skinId} 테마` : "평생이용권";
+    hint.textContent = `${codes.length}개 코드 준비됨 · ${targetText} · ${expiresAt || "무기한"} · ${usageText}`;
     hint.style.color = "var(--ok)";
   }
 }
 
 function generateLifetimePassCodes() {
   const count = Math.min(100, Math.max(1, parseInt(document.getElementById("lifetimePassGenerateCount").value) || 1));
-  const existing = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
+  const usage = document.getElementById("lifetimePassUsageLimit").value;
+  const existing = usage === "unlimited" ? [] : parseGiftCodes(document.getElementById("lifetimePassCodes").value);
   const codes = existing.slice();
-  while (codes.length < existing.length + count) {
+  const addCount = usage === "unlimited" ? 1 : count;
+  try { while (codes.length < existing.length + addCount) {
     const code = randomLifetimePassCode();
     if (!codes.includes(code)) codes.push(code);
-  }
+  } } catch (e) { alert(e.message); return; }
+  autoGeneratedGiftCodes = new Set([...autoGeneratedGiftCodes, ...codes]);
   document.getElementById("lifetimePassCodes").value = codes.join("\n");
   updateLifetimePassCodeHint();
 }
@@ -1696,15 +1734,20 @@ function buildLifetimePassMarker() {
   const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
   const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
   const usageLimit = document.getElementById("lifetimePassUsageLimit").value;
+  const label = document.getElementById("giftLabel").value.trim();
   const maxUses = usageLimit === "once" ? 1 : 0;
   const errors = [];
+  if (!label) errors.push("코드명/라벨을 입력하세요.");
   if (!codes.length) errors.push("해금 코드를 입력하거나 자동 생성하세요.");
-  if (targetType === "lifetime" && !expiresAt) errors.push("입력 가능 기한을 선택하세요.");
   if (targetType === "skin" && !/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("개별 테마 skinId는 영문/숫자/_ 만 사용하세요.");
   if (targetType === "skin" && /^[A-Za-z0-9_]+$/.test(skinId) && releasedSkins.length &&
       !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase()))
     errors.push(`'${skinId}'는 출시된 테마 목록에 없어요. 목록에서 선택하세요.`);
   codes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
+  const selected = targetType === "skin" ? selectedGiftSkin() : null;
+  if (selected && Number(selected.price || 0) > 0 && codes.some(c => !autoGeneratedGiftCodes.has(c)))
+    errors.push("유료 테마 코드는 자동 생성한 코드만 사용할 수 있습니다.");
+  if (maxUses === 0 && codes.length !== 1) errors.push("사용 제한이 없을 때는 코드 1개만 만들 수 있습니다.");
   if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return null; }
 
   const marker = targetType === "skin" ? {
@@ -1713,21 +1756,67 @@ function buildLifetimePassMarker() {
     skinGiftCodes: codes.map(code => ({
       skinId,
       hash: sha256(code),
+      maxUses,
+      ...(expiresAt ? { expiresAt } : {}),
     })),
   } : {
     source: "skin-builder",
     requestedAt: new Date().toISOString(),
     lifetimePassGiftCodes: codes.map(code => ({
       hash: sha256(code),
-      expiresAt,
-      ...(maxUses > 0 ? { maxUses } : {}),
+      maxUses,
+      ...(expiresAt ? { expiresAt } : {}),
     })),
   };
   const blob = new Blob([JSON.stringify(marker, null, 2)], { type: "application/json" });
   const filename = targetType === "skin"
     ? `${skinId}.skin-gift-codes.json`
-    : `lifetime-pass-${expiresAt}.lifetime-pass-codes.json`;
-  return { blob, filename };
+    : `lifetime-pass-${expiresAt || `no-expiry-${Date.now()}`}.lifetime-pass-codes.json`;
+  const createdAt = new Date().toISOString();
+  const randomId = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+  const registry = {
+    id: `REG-${createdAt.slice(0, 10).replace(/-/g, "")}-${randomId}`,
+    label, target_type: targetType === "skin" ? "skin" : "pass",
+    skin_id: targetType === "skin" ? skinId : null,
+    usage_limit: maxUses, code_count: codes.length,
+    expires_at: expiresAt || null, created_at: createdAt,
+  };
+  return { blob, filename, registry };
+}
+
+async function registerGiftBatch(registry) {
+  const res = await fetch(`${INBOX_API_URL}/v1/registry`, {
+    method: "POST", credentials: "include",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(registry),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요."); return false; }
+  if (!res.ok || !data.ok) throw new Error(data.error || `원장 등록 실패(${res.status})`);
+  pendingGiftRegistry = null;
+  document.getElementById("retryGiftRegistry").hidden = true;
+  await loadGiftRegistry();
+  return true;
+}
+
+async function loadGiftRegistry() {
+  const box = document.getElementById("giftRegistryList");
+  if (!box || !INBOX_API_URL) return;
+  try {
+    const res = await fetch(`${INBOX_API_URL}/v1/registry`, { credentials: "include", cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || `조회 실패(${res.status})`);
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    box.innerHTML = entries.length ? entries.map(e => {
+      const target = e.target_type === "skin" ? `개별 테마 · ${escapeHtml(e.skin_id || "-")}` : "평생이용권";
+      const created = Number.isFinite(Date.parse(e.created_at))
+        ? new Date(e.created_at).toLocaleString("ko-KR") : escapeHtml(e.created_at || "-");
+      return `<article class="gift-issued-item">` +
+        `<div class="gift-issued-title">${escapeHtml(e.label)}</div>` +
+        `<div class="gift-issued-meta">${target}<br>` +
+        `${Number(e.usage_limit) === 1 ? "1회 소진" : "무제한"} · ${Number(e.code_count)}개 · ` +
+        `만료 ${escapeHtml(e.expires_at || "없음")}<br>발급 ${created}</div></article>`;
+    }).join("") : `<div class="hint">아직 발급한 코드가 없습니다.</div>`;
+  } catch (e) { box.textContent = `원장 조회 실패: ${e.message}`; }
 }
 
 // JSON 만들기 — 파일로 다운로드(수동 업로드용, 기존 방식).
@@ -1754,8 +1843,16 @@ async function uploadLifetimePassMarker() {
   try {
     const ok = await commitToInbox(r.filename, r.blob, `chore(skin): _inbox/${r.filename} (해금 코드 업로드)`);
     if (ok) {
-      document.getElementById("status").innerHTML =
-        `✅ <b>${escapeHtml(r.filename)}</b> 업로드 완료 → 1~2분 뒤 Actions에서 해금 코드가 catalog에 자동 반영됩니다.`;
+      pendingGiftRegistry = r.registry;
+      try {
+        await registerGiftBatch(r.registry);
+        document.getElementById("status").innerHTML =
+          `✅ <b>${escapeHtml(r.filename)}</b> 업로드 및 원장 등록 완료 → 1~2분 뒤 catalog에 자동 반영됩니다.`;
+      } catch (e) {
+        document.getElementById("retryGiftRegistry").hidden = false;
+        document.getElementById("status").innerHTML =
+          `⚠️ 코드는 업로드됐지만 원장 등록에 실패했습니다: ${escapeHtml(e.message)}`;
+      }
     }
   } catch (e) {
     alert("업로드 중 오류: " + e.message);
@@ -1893,7 +1990,7 @@ document.getElementById("createdAt").value = nowLocalDateTime();
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);
 });
-["giftTargetType", "giftTargetSkinId", "lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount", "lifetimePassUsageLimit"].forEach(id => {
+["giftTargetType", "giftTargetSkinId", "giftLabel", "lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount", "lifetimePassUsageLimit"].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener("input", updateLifetimePassCodeHint);
   el.addEventListener("change", updateLifetimePassCodeHint);
@@ -1901,6 +1998,12 @@ document.getElementById("createdAt").value = nowLocalDateTime();
 document.getElementById("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
 document.getElementById("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
 document.getElementById("uploadLifetimePassMarker").addEventListener("click", uploadLifetimePassMarker);
+document.getElementById("retryGiftRegistry").addEventListener("click", async () => {
+  if (!pendingGiftRegistry) return;
+  try { await registerGiftBatch(pendingGiftRegistry); document.getElementById("status").textContent = "✅ 원장 등록을 완료했습니다."; }
+  catch (e) { alert(e.message); }
+});
+document.getElementById("refreshGiftRegistry").addEventListener("click", loadGiftRegistry);
 document.getElementById("makeBtn").addEventListener("click", makeZip);
 document.getElementById("autoUploadBtn").addEventListener("click", autoUpload);
 document.getElementById("loginForm").addEventListener("submit", submitLogin);
