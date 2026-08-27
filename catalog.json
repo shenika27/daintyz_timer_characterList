@@ -60,6 +60,21 @@
       },
       "createdAt": "2026-08-27T09:45:18",
       "version": 1
+    },
+    {
+      "skinId": "cha12",
+      "name": "cha12",
+      "price": 0,
+      "prestige": false,
+      "description": "부제(한글,선택)",
+      "localized": {
+        "en": {
+          "name": "테마이름(영어)",
+          "description": "부제(영어,선택)"
+        }
+      },
+      "createdAt": "2026-08-27T09:45:18",
+      "version": 1
     }
   ]
 }
