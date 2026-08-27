@@ -261,6 +261,18 @@
     <div class="grid" id="stateWrap"></div>
   </section>
 
+  <!-- 2-1. 특수 모션 (인터루드) -->
+  <section class="card">
+    <h2>2-1. 특수 모션 <span style="font-weight:400; color:var(--sub); font-size:14px;">(선택)</span></h2>
+    <p class="hint">작동(running) 중 <b>N분마다 M초 동안</b> 잠깐 끼어드는 모션입니다(예: 10분마다 5초 물마시기). 스킨마다 자유롭게 정할 수 있어요.
+      프레임을 올리고 아래 주기·길이를 <b>둘 다</b> 채우면 적용됩니다. 안 쓰려면 셋 다 비우세요. <b>화면이 켜져 있을 때만</b> 보입니다.</p>
+    <div class="itl-cfg" style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:4px 0 12px;">
+      <label>주기 <input type="number" id="itlEveryMin" min="0" step="0.5" placeholder="예: 10" style="width:90px;"> 분마다</label>
+      <label>길이 <input type="number" id="itlDurSec" min="0" step="0.5" placeholder="예: 5" style="width:90px;"> 초 동안</label>
+    </div>
+    <div id="interludeWrap"></div>
+  </section>
+
   <!-- 3. 타이머 디자인 -->
   <section class="card">
     <h2>3. 타이머 디자인</h2>
@@ -423,6 +435,10 @@ const BUTTONS = [
 // 상태별 프레임 저장소: { stop:{frames:[{file,url}], durId}, ... }
 const store = {};
 STATES.forEach(s => store[s.key] = { frames: [], dur: s.defDur, pingpong: false });
+// 특수 모션(인터루드) 프레임 저장소 — 위 상태들과 동일 구조라 addFrames/renderFrames 등을 그대로 재사용한다.
+// 주기(분)·길이(초)는 폼 입력칸(itlEveryMin/itlDurSec)에서 직접 읽는다. 기본 간격은 위젯 틱(250ms)에 맞춤.
+const ITL_DEF_DUR = 250;
+store.interlude = { frames: [], dur: ITL_DEF_DUR, pingpong: false };
 // 단일 에셋 저장소: background, minus.., font
 const assets = {};
 // 미리보기 저장소: thumb(단일) + prev 프레임 배열
@@ -547,6 +563,44 @@ function buildStateCards() {
     });
     renderStatePreview(s.key);
   });
+}
+
+/* ---------- 특수 모션(인터루드) 카드 ---------- */
+// 상태 카드와 동일한 프레임 UI(드롭·목록·미리보기·간격)를 stateKey "interlude"로 재사용한다.
+// 주기(분)·길이(초)는 이 섹션 상단의 별도 입력칸(itlEveryMin/itlDurSec)에서 읽는다.
+function buildInterludeCard() {
+  const wrap = document.getElementById("interludeWrap");
+  const card = document.createElement("div");
+  card.className = "state-card";
+  card.innerHTML = `
+    <h3>인터루드 프레임</h3>
+    <p class="sub">이 특수 모션에서 재생할 그림 (예: 물 마시는 동작)</p>
+    <div class="drop" data-state="interlude">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
+    <ul class="frames" id="frames_interlude"></ul>
+    <div class="anim-row"><div class="anim-box"><img id="anim_interlude" alt=""></div><span class="anim-cap" id="animcap_interlude">프레임 없음</span></div>
+    <div class="dur">프레임 간격 <input type="number" min="50" step="50" value="${ITL_DEF_DUR}" data-dur="interlude"> ms</div>
+    <label class="loopchk"><input type="checkbox" data-pingpong="interlude"> 순환(왕복) — 01-02-03-04-03-02 식으로 되돌아오며 한 세트</label>`;
+  wrap.appendChild(card);
+
+  const drop = card.querySelector(".drop");
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
+  card.appendChild(input);
+  drop.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { addFrames("interlude", input.files); input.value = ""; });
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFrames("interlude", e.dataTransfer.files); });
+  card.querySelector("[data-dur]").addEventListener("input", e => {
+    store.interlude.dur = parseInt(e.target.value) || ITL_DEF_DUR; renderStatePreview("interlude"); refresh();
+  });
+  card.querySelector("[data-pingpong]").addEventListener("change", e => {
+    store.interlude.pingpong = e.target.checked; renderStatePreview("interlude"); refresh();
+  });
+  // 주기·길이 입력은 값만 바뀌어도 검증/상태를 갱신.
+  document.getElementById("itlEveryMin").addEventListener("input", refresh);
+  document.getElementById("itlDurSec").addEventListener("input", refresh);
+  renderStatePreview("interlude");
 }
 
 /* ---------- 상태 프레임 애니메이션 미리보기 ---------- */
@@ -859,6 +913,23 @@ function buildSkinJson() {
   };
   if (store.pause.frames.length) character.pause = frameSet("pause");
 
+  // 특수 모션(인터루드): 프레임 + 주기(분) + 길이(초)가 모두 있어야 적용. 일부만 채우면 조용히 유실되지 않도록 오류로 막는다.
+  {
+    const itlEvery = parseFloat(document.getElementById("itlEveryMin").value) || 0;
+    const itlDur   = parseFloat(document.getElementById("itlDurSec").value) || 0;
+    const hasItlFrames = store.interlude.frames.length > 0;
+    if (hasItlFrames && itlEvery > 0 && itlDur > 0) {
+      if (itlDur > itlEvery * 60) errors.push("특수 모션 길이(초)가 주기(분)보다 깁니다. 길이를 주기 이내로 줄이세요.");
+      character.running.interlude = {
+        ...frameSet("interlude"),
+        everyMinutes: itlEvery,
+        durationSec: itlDur,
+      };
+    } else if (hasItlFrames || itlEvery > 0 || itlDur > 0) {
+      errors.push("특수 모션은 프레임·주기(분)·길이(초)를 모두 채워야 적용됩니다. 안 쓰려면 셋 다 비우세요.");
+    }
+  }
+
   const json = {
     skinId, name, isFree,
     ...(prestige ? { prestige: true } : {}),
@@ -953,6 +1024,12 @@ async function buildCharacterZipBlob(json, skinId) {
   for (const s of STATES) {
     store[s.key].frames.forEach((fr, i) => {
       root.file(`${s.key}_${pad2(i + 1)}.${extOf(fr.file.name, "png")}`, fr.file);
+    });
+  }
+  // 인터루드 프레임은 skin.json에 실제로 포함됐을 때만 넣는다(불완전 입력 시 불필요한 파일 방지).
+  if (json.character?.running?.interlude) {
+    store.interlude.frames.forEach((fr, i) => {
+      root.file(`interlude_${pad2(i + 1)}.${extOf(fr.file.name, "png")}`, fr.file);
     });
   }
   if (assets.background) root.file(assets.background.outName, assets.background.file);
@@ -1109,6 +1186,13 @@ function resetBuilderState() {
     const di = document.querySelector(`[data-dur="${s.key}"]`); if (di) di.value = s.defDur;
     const pi = document.querySelector(`[data-pingpong="${s.key}"]`); if (pi) pi.checked = false;
   });
+  // 인터루드 초기화(프레임 + 주기·길이 입력칸).
+  store.interlude.frames.forEach(fr => URL.revokeObjectURL(fr.url));
+  store.interlude.frames = []; store.interlude.pingpong = false; store.interlude.dur = ITL_DEF_DUR;
+  { const di = document.querySelector('[data-dur="interlude"]'); if (di) di.value = ITL_DEF_DUR;
+    const pi = document.querySelector('[data-pingpong="interlude"]'); if (pi) pi.checked = false;
+    const em = document.getElementById("itlEveryMin"); if (em) em.value = "";
+    const ds = document.getElementById("itlDurSec"); if (ds) ds.value = ""; }
   Object.keys(assets).forEach(k => { if (assets[k].url) URL.revokeObjectURL(assets[k].url); delete assets[k]; });
   if (previewThumb) { URL.revokeObjectURL(previewThumb.url); previewThumb = null; }
   previewFrames.forEach(fr => URL.revokeObjectURL(fr.url)); previewFrames.length = 0;
@@ -1193,6 +1277,13 @@ async function loadSkinForEdit(entry) {
     await loadFrameSetInto(zip, prefix, "running", ch.running && ch.running.default);
     await loadFrameSetInto(zip, prefix, "complete", ch.complete);
     if (ch.pause) await loadFrameSetInto(zip, prefix, "pause", ch.pause);
+    // 특수 모션(인터루드) 복원 — 프레임 + 주기·길이 입력칸까지 되돌린다(라운드트립 유실 방지).
+    const itl = ch.running && ch.running.interlude;
+    if (itl) {
+      await loadFrameSetInto(zip, prefix, "interlude", itl);
+      document.getElementById("itlEveryMin").value = (itl.everyMinutes != null) ? itl.everyMinutes : "";
+      document.getElementById("itlDurSec").value = (itl.durationSec != null) ? itl.durationSec : "";
+    }
 
     // 4) 타이머 에셋(배경/버튼/폰트)
     const timer = skinJson.timer || {};
@@ -1229,6 +1320,7 @@ async function loadSkinForEdit(entry) {
 
     // 6) UI 전체 다시 그리기
     STATES.forEach(s => renderFrames(s.key));
+    renderFrames("interlude");
     Object.values(assetRenderers).forEach(r => r());
     if (thumbRender) thumbRender();
     renderPrev();
@@ -1513,6 +1605,7 @@ function setupOpsPanel() {
 
 /* ---------- init ---------- */
 buildStateCards();
+buildInterludeCard();
 buildAssetSlot("background", "타이머 배경", "image/*");
 BUTTONS.forEach(b => buildAssetSlot(b.key, b.label, "image/*"));
 buildAssetSlot("font", "숫자 폰트(.ttf)", ".ttf,font/ttf,application/octet-stream");
