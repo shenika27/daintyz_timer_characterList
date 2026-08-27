@@ -1,6 +1,7 @@
 import { pbkdf2Sync, randomBytes } from "node:crypto";
 
-const ITERATIONS = 210_000;
+// Cloudflare Workers Web Crypto의 PBKDF2 상한은 100,000회다.
+const ITERATIONS = 100_000;
 const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,64}$/;
 const username = String(process.argv[2] || "").trim();
 

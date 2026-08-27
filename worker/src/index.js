@@ -10,6 +10,8 @@ const DEFAULTS = {
 };
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const LOGIN_MAX_FAILURES = 5;
+const PBKDF2_MIN_ITERATIONS = 10_000;
+const PBKDF2_MAX_ITERATIONS = 100_000;
 const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,64}$/;
 
 function cfg(env, name) { return (env && env[name]) || DEFAULTS[name]; }
@@ -54,6 +56,12 @@ async function passwordHash(password, saltBase64, iterations) {
     { name: "PBKDF2", hash: "SHA-256", salt: base64ToBytes(saltBase64), iterations }, key, 256
   );
   return bytesToBase64(new Uint8Array(bits));
+}
+function isSupportedPasswordIterations(value) {
+  const iterations = Number(value);
+  return Number.isInteger(iterations)
+    && iterations >= PBKDF2_MIN_ITERATIONS
+    && iterations <= PBKDF2_MAX_ITERATIONS;
 }
 function safeEqual(a, b) {
   a = String(a || ""); b = String(b || "");
@@ -136,6 +144,12 @@ async function handleLogin(request, env) {
   ).bind(username).first();
   let verified = false;
   if (user) {
+    if (!isSupportedPasswordIterations(user.password_iterations)) {
+      return json({
+        ok: false,
+        error: "이 계정의 비밀번호 설정을 갱신해야 합니다. 관리자에게 문의해 주세요.",
+      }, 503, env);
+    }
     const calculated = await passwordHash(password, user.password_salt, Number(user.password_iterations));
     verified = safeEqual(calculated, user.password_hash);
   }
@@ -229,4 +243,10 @@ export default {
   },
 };
 
-export const __test = { passwordHash, safeEqual, isSafeInboxPath, sha256 };
+export const __test = {
+  passwordHash,
+  isSupportedPasswordIterations,
+  safeEqual,
+  isSafeInboxPath,
+  sha256,
+};
