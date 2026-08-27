@@ -17,8 +17,9 @@
 ## 리포 구조
 
 ```
-docs/index.html                 ← 🎨 스킨빌더 (브라우저로 열어 번들 zip 생성)
-_inbox/                         ← 빌더 번들 zip 업로드함 (Action이 처리 후 비움)
+docs/index.html                 ← 🎨 로그인 기반 스킨빌더 (자동 업로드/수동 zip 생성)
+worker/                         ← 🔐 D1 로그인·세션 + _inbox 커밋 프록시 Worker
+_inbox/                         ← 빌더가 올린 번들/마커 처리함 (Action이 처리 후 비움)
 .github/workflows/skin-deploy.yml ← _inbox 번들 자동 배치 워크플로
 scripts/apply-skin-bundle.mjs   ← 번들 풀기 + catalog 병합 스크립트
 catalog.json                    ← 앱이 읽는 테마 목록 (+ baseUrl)
@@ -33,7 +34,7 @@ character/                      ← 테마 에셋 묶음
 - zip 안 파일명/구조는 그대로(루트에 `skin.json` + PNG들). zip을 **`character/zip/` 폴더 아래**에 둡니다.
 - 썸네일·미리보기는 **zip 밖 독립 PNG** — 다운로드(구매) 전 상점 목록·상점 미리보기에서 바로 보여줘야 하므로 zip에 넣지 않습니다.
 
-**신규 테마 출시(권장) = 스킨빌더로 번들 zip 만들어 `_inbox/`에 업로드만** 하면 됩니다 — `character/zip/`·`character/preview/` 배치와 `catalog.json` 갱신은 GitHub Action이 자동 처리(아래 **PART 3** 참고). 위 폴더들을 손으로 채우는 수동 방식도 그대로 가능합니다.
+**신규 테마 출시(권장) = 스킨빌더 로그인 → 내용 작성 → `자동 업로드`**면 끝입니다. 인증된 Worker가 번들을 `_inbox/`에 커밋하고, `character/zip/`·`character/preview/` 배치와 `catalog.json` 갱신은 GitHub Action이 자동 처리합니다(아래 **PART 3** 참고). zip을 내려받아 GitHub 웹에서 직접 올리는 수동 방식도 그대로 사용할 수 있습니다.
 반영 후 10~15분이면 jsDelivr CDN을 통해 앱 목록에 나타납니다.
 
 > ⚠️ `catalog.json`은 항상 최신이 필요해 앱이 **raw.githubusercontent**에서 받고, 무거운 에셋(zip/썸네일/미리보기)은
@@ -434,30 +435,68 @@ character/                      ← 테마 에셋 묶음
 
 # 📦 PART 3. 배포 절차
 
-## ⭐ 권장: 스킨빌더 + `_inbox` 자동 배치 (디자이너용)
+## ⭐ 권장: 로그인 스킨빌더 + 자동 업로드 (디자이너용)
 
-git/소스트리 몰라도 됩니다. **번들 zip 하나만 GitHub 웹에서 업로드**하면 끝.
+git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 한 번**이면 `_inbox` 커밋부터 배치까지 자동으로 처리됩니다.
 
-1. **스킨빌더**(이 레포 `docs/index.html`)를 브라우저로 열기
-2. 캐릭터 상태별 이미지 + 타이머 배경/버튼/폰트 + **썸네일·미리보기** + 기본정보(이름·가격·부제·출시일) 입력
+1. 배포된 **스킨빌더**(`https://shenika27.github.io/daintyz_timer_characterList/`) 열기
+2. D1에 등록된 아이디와 비밀번호로 로그인
+3. 캐릭터 상태별 이미지 + 타이머 배경/버튼/폰트 + **썸네일·미리보기** + 기본정보(이름·가격·부제·출시일) 입력
    - 영어 이름/설명(`localized.en`)을 넣으면 앱 언어가 English일 때 해당 문구가 우선 표시됩니다.
    - `상점에 노출 안 함(숨김)`은 catalog에는 남기되 상점 노출만 숨길 때 씁니다.
    - `판매 종료일`은 한정판매 종료 표시와 판매 가능 기간 판정에 씁니다.
-3. **`⬇ 번들 zip 만들기`** → `{skinId}.zip` 다운로드
-4. 이 레포 GitHub 페이지 → **`_inbox` 폴더** → **`Add file ▸ Upload files`** → zip 끌어다 놓고 **Commit**
+4. **`⬆ 자동 업로드`** 클릭
 5. 1~2분 뒤 `Actions` 탭에 ✅ 뜨면 반영 완료
+
+자동 업로드를 사용할 수 없는 경우에는 **`⬇ 번들 zip 만들기`**로 `{skinId}.zip`을 받은 뒤, 이 레포의 `_inbox` 폴더에서 **`Add file ▸ Upload files`**로 직접 올리고 Commit 합니다.
 
 > 업로드하면 GitHub Action(`.github/workflows/skin-deploy.yml`)이 자동으로:
 > 번들을 풀어 `character/zip/{id}.zip`·`character/preview/{id}/` 배치 + `catalog.json`에 항목 upsert(기존이면 version +1)
 > + (유료면) zip을 비공개 R2로 업로드 + **Play 인앱상품(SKU) 자동 등록** + 올린 inbox zip 삭제 후 커밋.
 > 즉 아래 "수동 절차"를 사람이 안 해도 됩니다. catalog 항목·파일명·폴더 규칙이 빌더에서 자동으로 맞춰집니다.
 
+### 스킨빌더 로그인·인증 운영
+
+- 로그인과 자동 업로드 API는 `worker/`의 Cloudflare Worker가 담당합니다.
+- 계정·세션은 timerWidget API와 같은 **`daintyz-timerwidget` D1**을 사용합니다.
+- 빌더 인증 데이터는 기존 앱 데이터와 충돌하지 않도록 `auth_users`, `auth_sessions`, `auth_login_attempts` 테이블에 분리합니다.
+- 비밀번호 원문은 저장하지 않습니다. PBKDF2-SHA-256 **100,000회** 해시만 D1에 저장합니다.
+- 로그인 세션은 기본 8시간이며, 브라우저에는 현재 탭의 `sessionStorage`에 세션 토큰만 저장합니다.
+- 같은 아이디/IP 조합에서 15분 안에 5회 실패하면 15분 동안 로그인이 차단됩니다.
+- 이전 단일 `ACCESS_KEY` 방식은 더 이상 사용하지 않습니다. 자동 업로드도 로그인 세션이 있어야 실행됩니다.
+
+최초 설치 또는 인증 테이블 추가:
+
+```powershell
+cd worker
+npx wrangler login
+npx wrangler d1 migrations apply daintyz-timerwidget --remote
+```
+
+계정 생성 또는 기존 계정 비밀번호 변경(같은 아이디면 중복 오류 없이 갱신):
+
+```powershell
+node scripts/create-user.mjs daintyz-admin
+```
+
+명령이 출력한 SQL 전체를 Cloudflare 대시보드의 `D1 → daintyz-timerwidget → Console`에서 실행합니다. 그다음 Worker를 배포합니다.
+
+```powershell
+npx wrangler secret list
+# GITHUB_TOKEN이 없을 때만: npx wrangler secret put GITHUB_TOKEN
+npx wrangler deploy
+```
+
+Worker를 먼저 배포한 뒤 GitHub Pages 코드를 반영해야 새 로그인 화면이 구형 Worker API를 호출하는 시간을 피할 수 있습니다. 상세 설정과 API 명세는 [`worker/README.md`](worker/README.md)를 참고하세요.
+
+> 로그인 화면은 정적 GitHub Pages의 진입 UI를 잠그고, 실제 보호가 필요한 자동 업로드는 Worker가 서버 측에서 인증합니다. GitHub Pages의 HTML 소스 자체를 비공개로 만드는 구조는 아닙니다.
+
 ### 출시된 스킨 수정/삭제
 
 스킨빌더 오른쪽의 **출시된 스킨** 목록은 `catalog.json`과 기존 zip/preview를 불러와 수정용 폼으로 복원합니다.
 
-- 기존 테마를 고른 뒤 수정해서 다시 zip을 만들고 `_inbox`에 올리면 같은 `skinId` 항목이 갱신되고 `version`이 올라갑니다.
-- 목록의 삭제 버튼은 `{skinId}.delete.json` 삭제 마커를 만듭니다. 이 파일을 `_inbox`에 올리면
+- 기존 테마를 고른 뒤 수정해서 자동 업로드하면 같은 `skinId` 항목이 갱신되고 `version`이 올라갑니다.
+- 목록의 삭제 버튼으로 확인하면 `{skinId}.delete.json` 삭제 마커가 자동 업로드됩니다. 수동 방식을 선택한 경우에만 마커 파일을 `_inbox`에 직접 올립니다. 처리되면
   `character/zip/{skinId}.zip`, `character/preview/{skinId}/`, `catalog.json` 항목이 정리됩니다.
 - 삭제 마커에 `productId`가 있으면 catalog 항목이 이미 사라진 상태에서도 해당 Play SKU를 `inactive`로 비활성화할 수 있습니다.
 
