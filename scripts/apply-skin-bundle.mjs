@@ -24,8 +24,14 @@ const R2_DELETE = path.join(ROOT, "_r2_delete.txt");  // R2에서 지울 키({sk
 // 워크플로우의 Play 스텝이 이 둘을 읽어 인앱상품(SKU)을 upsert/비활성화한 뒤 catalog를 커밋한다.
 const PLAY_UPSERT = path.join(ROOT, "_play_upsert.json"); // [{productId,skinId,name,price}] — 등록/수정할 유료 상품
 const PLAY_DELETE = path.join(ROOT, "_play_delete.txt");  // 비활성화할 productId 한 줄씩(삭제된 유료 스킨)
+// 은퇴(삭제)한 skinId/productId 원장 — 이 파일은 '커밋'된다(.gitignore 대상 아님).
+// 삭제할 때마다 자동 적립하고, 나중에 같은 skinId가 다시 올라오면 재사용을 감지해 경고한다.
+const RETIRED = path.join(ROOT, "_retired_ids.json");
 
 function log(msg) { console.log(`[apply-skin-bundle] ${msg}`); }
+
+/** YYYY-MM-DD (UTC) — 은퇴 기록 날짜. */
+function today() { return new Date().toISOString().slice(0, 10); }
 
 /** catalog 항목이 유료인지(price>0). */
 function isPaidEntry(e) { return e && Number(e.price) > 0; }
@@ -40,15 +46,17 @@ function productIdOf(entry) {
   return entry.productId || `skin_${String(entry.skinId).toLowerCase()}`;
 }
 
-/** Play 동기화 매니페스트에 upsert 항목 누적(파일이 없으면 새로). */
+/** Play 동기화 매니페스트에 upsert 항목 누적(파일이 없으면 새로).
+ *  isNew=true 는 이 skinId가 catalog에 '처음' 등장한다는 뜻 — sync 스크립트가 productId 재사용을 차단하는 데 쓴다. */
 const playUpserts = [];
-function queuePlayUpsert(entry) {
+function queuePlayUpsert(entry, isNew) {
   playUpserts.push({
     productId: productIdOf(entry),
     skinId: entry.skinId,
     name: entry.name,
     ...(entry.localized ? { localized: entry.localized } : {}),
     price: Number(entry.price) || 0,
+    isNew: !!isNew,
   });
 }
 /** Play 삭제(비활성화) 매니페스트에 productId 한 줄 추가. */
@@ -77,6 +85,16 @@ try {
 }
 if (!Array.isArray(catalog.skins)) catalog.skins = [];
 if (!Array.isArray(catalog.lifetimePassGiftCodes)) catalog.lifetimePassGiftCodes = [];
+
+// 은퇴 원장 로드(없으면 새로). { retired: [{ skinId, productId?, retiredAt }] }
+let retiredLedger;
+try {
+  retiredLedger = JSON.parse(fs.readFileSync(RETIRED, "utf8"));
+} catch {
+  retiredLedger = { retired: [] };
+}
+if (!Array.isArray(retiredLedger.retired)) retiredLedger.retired = [];
+const retiredIndexOf = (skinId) => retiredLedger.retired.findIndex(r => r.skinId === skinId);
 
 fs.rmSync(WORK, { recursive: true, force: true });
 // R2 스테이징/매니페스트는 매 실행 새로 시작(이전 실행 잔여물이 섞이면 안 됨).
@@ -141,6 +159,18 @@ for (const zip of zips) {
 
   // 4) catalog 병합 (skinId 기준 upsert; 기존이면 version +1)
   const idx = catalog.skins.findIndex(s => s.skinId === entry.skinId);
+
+  // 방법1: 예전에 삭제(은퇴)했던 skinId가 다시 올라오는지 감지.
+  //   skinId 재사용은 보안 누수는 아니지만, 옛 스킨을 보유했던 사용자 화면에 잘못 '보유'로 뜨는
+  //   UX 잔상을 만들 수 있어 경고만 남긴다(배포는 계속). 되살아났으니 원장에서는 제거한다.
+  const revivedIdx = retiredIndexOf(entry.skinId);
+  if (revivedIdx >= 0) {
+    const prev = retiredLedger.retired[revivedIdx];
+    console.log(`::warning::[apply-skin-bundle] skinId '${entry.skinId}' 는 ${prev.retiredAt}에 삭제된 적이 있는 id의 재사용입니다. ` +
+      `같은 스킨의 부활이면 OK. 다른 스킨이면 새 skinId 권장(옛 보유자에게 '보유 표시인데 다운로드 실패'가 남을 수 있음).`);
+    retiredLedger.retired.splice(revivedIdx, 1);
+  }
+
   if (idx >= 0) {
     const prevVer = Number(catalog.skins[idx].version) || 1;
     entry.version = prevVer + 1; // 재업로드 = 변경 → 버전 올림
@@ -162,8 +192,9 @@ for (const zip of zips) {
   }
 
   // 5) 유료면 Play 인앱상품 동기화 큐에 올린다(SKU 등록/가격·이름 수정).
+  //    idx<0 = catalog에 처음 등장하는 skinId → isNew. sync가 productId 재사용을 막는 데 쓴다.
   if (paid) {
-    queuePlayUpsert(entry);
+    queuePlayUpsert(entry, idx < 0);
     log(`  → Play 동기화 예약: ${productIdOf(entry)} (${entry.price}원)`);
   }
 
@@ -213,6 +244,13 @@ for (const marker of markers) {
   const before = catalog.skins.length;
   catalog.skins = catalog.skins.filter(s => s.skinId !== skinId);
   log(`  → 삭제: ${skinId} (character/zip·preview 제거, catalog ${before}→${catalog.skins.length})`);
+
+  // 방법1: 은퇴 원장에 기록(중복 skinId면 최신 날짜로 갱신). free/paid 모두 기록해 skinId 재사용을 감지.
+  const retiredProductId = (existing && existing.productId) || (deleteEntry && deleteEntry.productId) || null;
+  const record = { skinId, ...(retiredProductId ? { productId: retiredProductId } : {}), retiredAt: today() };
+  const rIdx = retiredIndexOf(skinId);
+  if (rIdx >= 0) retiredLedger.retired[rIdx] = record; else retiredLedger.retired.push(record);
+
   fs.rmSync(markerPath, { force: true });
   deleted++;
 }
@@ -299,6 +337,10 @@ if (skinCodesApplied > 0) {
 
 // catalog 저장 (2-space, 트레일링 개행)
 fs.writeFileSync(CATALOG, JSON.stringify(catalog, null, 2) + "\n");
+
+// 은퇴 원장 저장(커밋 대상). skinId 정렬로 diff 안정화. 항상 기록 → 첫 실행 때 파일 생성.
+retiredLedger.retired.sort((a, b) => String(a.skinId).localeCompare(String(b.skinId)));
+fs.writeFileSync(RETIRED, JSON.stringify(retiredLedger, null, 2) + "\n");
 
 // Play upsert 매니페스트 기록(있을 때만 — 없으면 Play 스텝이 통째로 건너뜀).
 if (playUpserts.length > 0) {

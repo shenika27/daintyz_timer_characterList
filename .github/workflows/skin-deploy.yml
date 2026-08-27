@@ -76,7 +76,8 @@ jobs:
           git config user.name "skin-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # _r2_upload·_r2_delete.txt 는 .gitignore 대상 — 절대 add 하지 않는다(유료 원본 유출 방지).
-          git add character catalog.json _inbox
+          # _retired_ids.json 은 삭제된 skinId/productId 원장(재사용 감지용) — 커밋 대상.
+          git add character catalog.json _inbox _retired_ids.json
           if git diff --cached --quiet; then
             echo "변경 없음 — 커밋 생략"
           else

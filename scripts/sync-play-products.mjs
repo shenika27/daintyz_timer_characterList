@@ -34,6 +34,9 @@ const PKG = process.env.ANDROID_PACKAGE_NAME || "";
 const NEW_STATUS = (process.env.PLAY_PRODUCT_STATUS || "inactive").toLowerCase() === "active"
   ? "active" : "inactive";
 const CURRENCY = process.env.PLAY_PRICE_CURRENCY || "KRW";
+// 방법3: 신규 스킨이 '이미 존재하는' productId를 재사용하면 기본 차단(과거 구매 이력 누수 방지).
+// 정당한 재시도(예: 상품은 만들어졌는데 catalog 커밋이 실패한 경우) 등에서만 =1로 강행 허용.
+const ALLOW_REUSE = String(process.env.ALLOW_PRODUCT_ID_REUSE || "").trim() === "1";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3";
@@ -159,6 +162,15 @@ for (const item of upserts) {
     if (r.ok) { created++; log(`등록: ${sku} (${item.price}${CURRENCY}, status=${body.status})`); }
     else errors.push(`insert ${sku} 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
   } else if (got.ok) {
+    // 방법3: 새 스킨(catalog에 처음 등장)이 이미 존재하는 productId를 재사용하려는 경우 차단.
+    //   기존 상품엔 과거 구매 이력이 남아 있어, 그대로 갱신하면 옛 구매자가 새 스킨을 무료로 언락한다.
+    //   같은 스킨의 수정/재업로드는 isNew=false 라 여기 안 걸린다(정상 수정 경로로 진행).
+    if (item.isNew && !ALLOW_REUSE) {
+      errors.push(`productId 재사용 차단: '${sku}' 는 이미 Play에 존재합니다(과거 구매 이력 가능). ` +
+        `새 스킨 '${item.skinId}' 에는 새 productId를 쓰세요. ` +
+        `정당한 재시도로 강행하려면 워크플로 env ALLOW_PRODUCT_ID_REUSE=1 로 실행하세요.`);
+      continue;
+    }
     const body = buildProduct(item, got.json);
     const r = await apiFetch(token, ipUrl(sku, "?autoConvertMissingPrices=true"), "PUT", body);
     if (r.ok) { updated++; log(`수정: ${sku} (${item.price}${CURRENCY}, status 유지=${body.status})`); }
