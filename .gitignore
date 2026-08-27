@@ -14,6 +14,5 @@ _inbox_work/
 # 에디터/도구
 .claude/
 
-# wrangler 로컬 캐시(계정 ID·인증 등) — 커밋 금지
+# 기존 공개 경로에 남을 수 있는 Wrangler 로컬 캐시(커밋 금지)
 worker/.wrangler/
-worker/*.sql
