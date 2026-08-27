@@ -75,6 +75,14 @@
       "prestige": false,
       "createdAt": "2026-08-27T15:21:18",
       "version": 1
+    },
+    {
+      "skinId": "cha14",
+      "name": "14",
+      "price": 0,
+      "prestige": false,
+      "createdAt": "2026-08-27T15:21:18",
+      "version": 1
     }
   ]
 }
