@@ -3,33 +3,62 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
-      "skinId": "cha02",
-      "name": "홉빵이",
+      "skinId": "cha07",
+      "name": "cha07",
       "price": 0,
       "prestige": false,
-      "description": "런닝머신 뛰는 홉빵",
+      "description": "cha07",
       "localized": {
         "en": {
-          "name": "Hope-pan",
-          "description": "Hape-pan running on the treadmill"
+          "name": "cha07",
+          "description": "cha07"
         }
       },
-      "createdAt": "2026-08-26",
+      "createdAt": "2026-08-26T21:30:11",
+      "version": 2
+    },
+    {
+      "skinId": "cha08",
+      "name": "cha08",
+      "price": 0,
+      "prestige": false,
+      "localized": {
+        "en": {
+          "name": "cha08"
+        }
+      },
+      "createdAt": "2026-08-26T21:30:11",
       "version": 1
     },
     {
-      "skinId": "cha03",
-      "name": "런닝하는 홉빵",
+      "skinId": "cha09",
+      "name": "cha09",
       "price": 0,
       "prestige": false,
-      "description": "런닝하는 홉빵",
+      "createdAt": "2026-08-26T21:40:45",
+      "version": 1
+    },
+    {
+      "skinId": "cha10",
+      "name": "10",
+      "price": 0,
+      "prestige": false,
+      "createdAt": "2026-08-26T21:40:45",
+      "version": 1
+    },
+    {
+      "skinId": "cha11",
+      "name": "테마이름(한글)",
+      "price": 0,
+      "prestige": false,
+      "description": "부제(한글,선택)",
       "localized": {
         "en": {
-          "name": "Hope-pan",
-          "description": "Hope-pan"
+          "name": "테마이름(영어)",
+          "description": "부제(영어,선택)"
         }
       },
-      "createdAt": "2026-08-26",
+      "createdAt": "2026-08-27T09:45:18",
       "version": 1
     }
   ]
