@@ -30,10 +30,13 @@ jobs:
 
       # 유료 스킨 zip은 공개 레포가 아니라 비공개 R2(daintyz-skins)에 올린다.
       # apply 스크립트가 _r2_upload/{skinId}.zip(올릴 것)과 _r2_delete.txt(지울 키)를 만든다.
-      # 무료 전용 번들이면 둘 다 비어 있어 통째로 건너뛴다 → 토큰 없이도 무료 파이프라인 정상 동작.
+      # 순서 원칙: 업로드 → Play 동기화 → catalog 커밋 → (맨 마지막) R2 삭제.
+      #   삭제를 먼저 하면 Play/커밋 실패 시 "catalog엔 있는데 R2엔 zip이 없는" 상태가 될 수 있어,
+      #   삭제만 모든 성공 이후로 미룬다. 이 스텝은 '올리기'만 담당한다.
+      # 무료 전용 번들이면 올릴 게 없어 건너뛴다 → 토큰 없이도 무료 파이프라인 정상 동작.
       # 유료가 있는데 토큰이 없으면 여기서 실패 → 아래 커밋 스텝이 실행되지 않아
       # "catalog엔 유료 스킨이 보이는데 R2엔 zip이 없는" 깨진 상태를 방지한다.
-      - name: R2 업로드/삭제 (유료 스킨)
+      - name: R2 업로드 (유료 스킨)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -41,10 +44,8 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           uploads=(_r2_upload/*.zip)
-          has_delete=false
-          if [ -s _r2_delete.txt ]; then has_delete=true; fi
-          if [ ${#uploads[@]} -eq 0 ] && [ "$has_delete" = false ]; then
-            echo "R2 작업 없음(무료 전용) — 건너뜀"
+          if [ ${#uploads[@]} -eq 0 ]; then
+            echo "R2 업로드 없음(무료 전용 또는 삭제만) — 건너뜀"
             exit 0
           fi
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
@@ -56,13 +57,6 @@ jobs:
             echo "R2 업로드: daintyz-skins/$key"
             npx -y wrangler@3 r2 object put "daintyz-skins/$key" --file "$f" --remote
           done
-          if [ "$has_delete" = true ]; then
-            while IFS= read -r key; do
-              [ -n "$key" ] || continue
-              echo "R2 삭제: daintyz-skins/$key"
-              npx -y wrangler@3 r2 object delete "daintyz-skins/$key" --remote || true
-            done < _r2_delete.txt
-          fi
 
       # 유료 스킨이 새로 올라오면 Play 인앱상품(SKU)을 자동 등록/수정한다.
       # apply 스크립트가 _play_upsert.json(등록할 유료 상품) / _play_delete.txt(비활성화할 productId)를 만든다.
@@ -89,3 +83,28 @@ jobs:
             git commit -m "chore(skin): _inbox 번들 자동 배치 + catalog 병합"
             git push
           fi
+
+      # 교체·제거된 유료 스킨의 옛 R2 객체 삭제 — 반드시 맨 마지막에.
+      # 업로드·Play 동기화·catalog 커밋이 모두 성공한 뒤에만 지우므로,
+      # 삭제가 실패해도 판매 중 상품의 zip이 먼저 사라지는 일은 없고 catalog에서
+      # 이미 빠진 미사용 객체만 남는다. 그래서 실패를 '|| true'로 삼키지 않고
+      # 워크플로를 실패 처리해, 재실행·수동 정리로 orphan을 치울 수 있게 둔다.
+      - name: R2 삭제 (교체·제거된 유료 스킨)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ ! -s _r2_delete.txt ]; then
+            echo "R2 삭제 없음 — 건너뜀"
+            exit 0
+          fi
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::error::삭제할 R2 객체가 있으나 CLOUDFLARE_API_TOKEN 시크릿이 없습니다 — 중단합니다."
+            exit 1
+          fi
+          while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            echo "R2 삭제: daintyz-skins/$key"
+            npx -y wrangler@3 r2 object delete "daintyz-skins/$key" --remote
+          done < _r2_delete.txt
