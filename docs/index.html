@@ -16,12 +16,48 @@
     margin: 0; font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
     background: var(--bg); color: var(--ink); line-height: 1.5;
   }
+  body.auth-pending { overflow: hidden; }
+  body.auth-pending > :not(#loginGate):not(script) { display: none !important; }
+  #loginGate {
+    position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+    padding: 24px; background: linear-gradient(145deg, #edf1ff 0%, #f8f9fc 52%, #f3efff 100%);
+  }
+  #loginGate[hidden] { display: none; }
+  .login-card {
+    width: min(100%, 390px); padding: 32px; background: rgba(255,255,255,.96);
+    border: 1px solid rgba(91,124,250,.18); border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(41,52,98,.15);
+  }
+  .login-mark {
+    width: 52px; height: 52px; display: grid; place-items: center; margin-bottom: 18px;
+    border-radius: 15px; background: var(--accent); color: #fff; font-size: 25px;
+  }
+  .login-card h1 { margin: 0; font-size: 22px; }
+  .login-card .login-sub { margin: 7px 0 22px; color: var(--sub); font-size: 13px; }
+  .login-card label { display: block; margin-top: 13px; font-size: 13px; font-weight: 700; }
+  .login-card input {
+    width: 100%; margin-top: 6px; padding: 11px 12px; border: 1px solid var(--line);
+    border-radius: 9px; font: inherit; background: #fff; color: var(--ink);
+  }
+  .login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,124,250,.12); }
+  #loginBtn {
+    width: 100%; margin-top: 20px; padding: 12px; border: 0; border-radius: 9px;
+    background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  #loginBtn:hover { background: var(--accent-d); }
+  #loginBtn:disabled { background: #aeb8dd; cursor: wait; }
+  #loginError { min-height: 20px; margin: 10px 0 0; color: var(--danger); font-size: 12.5px; }
   header {
     background: var(--card); border-bottom: 1px solid var(--line);
     padding: 18px 24px; position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 18px;
   }
+  .header-copy { min-width: 0; flex: 1; }
   header h1 { margin: 0; font-size: 18px; }
   header p { margin: 4px 0 0; font-size: 13px; color: var(--sub); }
+  .auth-user { display: flex; align-items: center; gap: 9px; flex: none; font-size: 12.5px; color: var(--sub); }
+  #logoutBtn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 10px; cursor: pointer; color: var(--sub); }
+  #logoutBtn:hover { border-color: var(--accent); color: var(--accent); }
   main { max-width: 880px; margin: 0 auto; padding: 24px 16px 120px; }
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
@@ -94,6 +130,9 @@
     padding: 7px 12px; font-size: 13px; cursor: pointer; color: var(--ink);
   }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
+  .pick-sm { padding: 3px 9px; font-size: 12px; }
+  /* 해금 코드 라벨 + 우측 상단 '자동 생성' 버튼을 한 줄에 */
+  label.field > span.codes-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .clear-x { border:none; background:none; color: var(--danger); cursor:pointer; font-size: 18px; padding: 0 4px; }
 
   details.opt { border: 1px solid var(--line); border-radius: 10px; padding: 0; margin-top: 6px; }
@@ -185,6 +224,19 @@
   .rel-badge { color: var(--accent); font-weight: 700; }
   .rel-meta { font-size: 11.5px; color: var(--sub); margin-top: 2px; }
   .rel-empty { padding: 18px 12px; font-size: 12.5px; color: var(--sub); text-align: center; line-height: 1.6; }
+  /* 개별 테마 skinId 선택용 자동완성 콤보 — 출시된 스킨만 고를 수 있다. */
+  .combo { position: relative; }
+  .combo-list {
+    list-style: none; margin: 4px 0 0; padding: 4px; position: absolute; left: 0; right: 0; top: 100%;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.10); max-height: 240px; overflow-y: auto; z-index: 20; display: none;
+  }
+  .combo.open .combo-list { display: block; }
+  .combo-item { padding: 7px 9px; border-radius: 6px; cursor: pointer; }
+  .combo-item:hover, .combo-item.active { background: var(--chip); }
+  .combo-item .ci-id { font-size: 13px; font-weight: 600; }
+  .combo-item .ci-name { font-size: 11.5px; color: var(--sub); margin-top: 1px; }
+  .combo-empty { padding: 10px 9px; font-size: 12px; color: var(--sub); text-align: center; }
   #relReopen {
     position: fixed; top: 84px; right: 40px; z-index: 6; display: none;
     border: 1px solid var(--accent); background: #fff; color: var(--accent);
@@ -202,10 +254,26 @@
   }
 </style>
 </head>
-<body>
+<body class="auth-pending">
+<div id="loginGate" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+  <form class="login-card" id="loginForm">
+    <div class="login-mark" aria-hidden="true">⏱</div>
+    <h1 id="loginTitle">스킨 빌더 로그인</h1>
+    <p class="login-sub">등록된 계정으로 로그인하면 캐릭터 타이머 스킨 빌더를 사용할 수 있습니다.</p>
+    <label for="loginUsername">아이디</label>
+    <input type="text" id="loginUsername" autocomplete="username" maxlength="64" required>
+    <label for="loginPassword">비밀번호</label>
+    <input type="password" id="loginPassword" autocomplete="current-password" maxlength="1024" required>
+    <button type="submit" id="loginBtn">로그인</button>
+    <p id="loginError" role="alert" aria-live="polite"></p>
+  </form>
+</div>
 <header>
-  <h1>🎨 캐릭터 타이머 스킨 빌더</h1>
-  <p>아래 항목을 채우고 <b>[⬆ 자동 업로드]</b> 한 번이면 끝입니다. (또는 <b>[⬇ zip 만들기]</b>로 받아 <b>[📤 직접 업로드]</b>) 나머지(배치·등록)는 자동으로 처리돼요.</p>
+  <div class="header-copy">
+    <h1>🎨 캐릭터 타이머 스킨 빌더</h1>
+    <p>아래 항목을 채우고 <b>[⬆ 자동 업로드]</b> 한 번이면 끝입니다. (또는 <b>[⬇ zip 만들기]</b>로 받아 <b>[📤 직접 업로드]</b>) 나머지(배치·등록)는 자동으로 처리돼요.</p>
+  </div>
+  <div class="auth-user"><span id="authUsername"></span><button type="button" id="logoutBtn">로그아웃</button></div>
 </header>
 
 <main>
@@ -368,7 +436,11 @@
           <option value="skin">개별 테마</option>
         </select></label>
       <label class="field" id="giftTargetSkinField"><span>skinId (개별 테마)</span>
-        <input type="text" id="giftTargetSkinId" placeholder="예: cha07" autocomplete="off"></label>
+        <div class="combo" id="giftSkinCombo">
+          <input type="text" id="giftTargetSkinId" placeholder="출시된 테마 검색·선택" autocomplete="off"
+                 role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="giftSkinComboList">
+          <ul class="combo-list" id="giftSkinComboList" role="listbox"></ul>
+        </div></label>
       <label class="field"><span>코드 자동 생성 개수</span>
         <input type="number" id="lifetimePassGenerateCount" min="1" max="100" step="1" value="10" autocomplete="off"></label>
       <label class="field" id="giftExpiresField"><span>입력 가능 기한 <b style="color:var(--danger)">*</b></span>
@@ -378,14 +450,15 @@
           <option value="unlimited">제한 없음</option>
           <option value="once">1회 소진</option>
         </select></label>
-      <label class="field"><span>해금 코드</span>
+      <label class="field"><span class="codes-head">해금 코드
+          <button class="pick pick-sm" id="generateLifetimePassCodes" type="button">자동 생성</button></span>
         <textarea id="lifetimePassCodes" placeholder="예: PASS-2026-ABCD, VIP-7DAYS"></textarea></label>
     </div>
     <p class="hint" style="margin:8px 0 0">영문·숫자·<code>-</code>만 허용합니다. 저장 파일에는 SHA-256 해시만 들어가므로, 만든 코드는 따로 보관해 주세요. 개별 테마 코드는 catalog의 해당 skinId에 병합됩니다.</p>
     <div id="lifetimePassCodeHint" style="margin:6px 0 0;font-size:12.5px;color:var(--sub)"></div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="pick" id="generateLifetimePassCodes" type="button">자동 생성</button>
       <button class="pick" id="makeLifetimePassMarker" type="button">JSON 만들기</button>
+      <button class="pick" id="uploadLifetimePassMarker" type="button">코드 업로드</button>
     </div>
   </div>
 </aside>
@@ -1117,21 +1190,83 @@ async function autoUpload() {
 /* ---------- 편집 로드(기존 스킨 불러오기) + 삭제 ---------- */
 const RAW_BASE = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main";
 
-/* ---------- _inbox 원클릭 커밋 (Cloudflare Worker 경유) ----------
-   INBOX_API_URL 이 설정돼 있으면 업로드/삭제가 다운로드 대신 곧바로 커밋된다.
-   비어 있으면(미배포) 기존 "다운로드 → 수동 업로드" 방식으로 자동 폴백한다. */
+/* ---------- 로그인 + _inbox 원클릭 커밋 (Cloudflare Worker 경유) ---------- */
 const INBOX_API_URL = "https://daintyz-skin-inbox.xornexon.workers.dev"; // _inbox 커밋 프록시 Worker
+const AUTH_TOKEN_KEY = "skinBuilderSession";
 
 function inboxReady() { return !!INBOX_API_URL; }
 
-// 접근 비번을 localStorage에 1회 저장하고 재사용. 없으면 물어본다.
-function getInboxKey(force = false) {
-  let key = localStorage.getItem("inboxKey") || "";
-  if (force || !key) {
-    key = (prompt("업로드 접근 비번을 입력하세요(최초 1회만):", key) || "").trim();
-    if (key) localStorage.setItem("inboxKey", key);
+function getAuthToken() {
+  try { return sessionStorage.getItem(AUTH_TOKEN_KEY) || ""; }
+  catch { return ""; }
+}
+function setAuthToken(token) {
+  try { sessionStorage.setItem(AUTH_TOKEN_KEY, token); } catch {}
+}
+function clearAuthToken() {
+  try { sessionStorage.removeItem(AUTH_TOKEN_KEY); } catch {}
+}
+function showLogin(message = "") {
+  clearAuthToken();
+  document.body.classList.add("auth-pending");
+  document.getElementById("loginGate").hidden = false;
+  document.getElementById("loginError").textContent = message;
+  document.getElementById("loginPassword").value = "";
+  setTimeout(() => document.getElementById("loginUsername").focus(), 0);
+}
+function showBuilder(username) {
+  document.getElementById("authUsername").textContent = `${username}님`;
+  document.getElementById("loginGate").hidden = true;
+  document.body.classList.remove("auth-pending");
+}
+async function initializeAuth() {
+  // 이전 단일 비밀번호 방식에서 남은 브라우저 저장값을 제거한다.
+  try { localStorage.removeItem("inboxKey"); } catch {}
+  const token = getAuthToken();
+  if (!token) { showLogin(); return; }
+  try {
+    const res = await fetch(`${INBOX_API_URL}/auth/session`, {
+      method: "GET", headers: { "Authorization": `Bearer ${token}` }, cache: "no-store",
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) { showBuilder(data.username); return; }
+  } catch {}
+  showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
+}
+async function submitLogin(event) {
+  event.preventDefault();
+  const button = document.getElementById("loginBtn");
+  const error = document.getElementById("loginError");
+  button.disabled = true; button.textContent = "확인 중…"; error.textContent = "";
+  try {
+    const res = await fetch(`${INBOX_API_URL}/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("loginUsername").value.trim(),
+        password: document.getElementById("loginPassword").value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "로그인에 실패했습니다.");
+    setAuthToken(data.token);
+    document.getElementById("loginPassword").value = "";
+    showBuilder(data.username);
+  } catch (e) {
+    error.textContent = e.message || "로그인 서버에 연결하지 못했습니다.";
+  } finally {
+    button.disabled = false; button.textContent = "로그인";
   }
-  return key;
+}
+async function logout() {
+  const token = getAuthToken();
+  showLogin("로그아웃되었습니다.");
+  if (token) {
+    try {
+      await fetch(`${INBOX_API_URL}/auth/logout`, {
+        method: "POST", headers: { "Authorization": `Bearer ${token}` },
+      });
+    } catch {}
+  }
 }
 
 // Blob → base64 문자열(데이터URL 접두사 제거).
@@ -1145,37 +1280,31 @@ function blobToBase64(blob) {
 }
 
 // _inbox/<filename> 로 파일 하나를 커밋. 성공 true / 실패 false.
-// 비번이 틀리면(401) 저장값을 지우고 그 자리에서 다시 입력받아 한 번 더 시도한다.
 async function commitToInbox(filename, blob, message) {
   const contentBase64 = await blobToBase64(blob);
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const key = getInboxKey(attempt > 0); // 재시도(attempt=1)면 저장값 무시하고 새로 입력
-    if (!key) { alert("접근 비번이 없어 취소했습니다."); return false; }
-    let res, data;
-    try {
-      res = await fetch(INBOX_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, path: `_inbox/${filename}`, contentBase64, message }),
-      });
-      data = await res.json();
-    } catch (e) {
-      alert("업로드 서버에 연결하지 못했습니다: " + e.message);
-      return false;
-    }
-    if (res.status === 401) {
-      localStorage.removeItem("inboxKey"); // 틀린 비번 폐기
-      if (attempt === 0) { alert("접근 비번이 올바르지 않습니다. 다시 입력해 주세요."); continue; }
-      alert("접근 비번이 또 틀렸습니다. 취소합니다.");
-      return false;
-    }
-    if (!data || !data.ok) {
-      alert("업로드 실패: " + (data && data.error ? data.error : res.status));
-      return false;
-    }
-    return true;
+  const token = getAuthToken();
+  if (!token) { showLogin("로그인이 필요합니다."); return false; }
+  let res, data;
+  try {
+    res = await fetch(`${INBOX_API_URL}/inbox`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      body: JSON.stringify({ path: `_inbox/${filename}`, contentBase64, message }),
+    });
+    data = await res.json();
+  } catch (e) {
+    alert("업로드 서버에 연결하지 못했습니다: " + e.message);
+    return false;
   }
-  return false;
+  if (res.status === 401) {
+    showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
+    return false;
+  }
+  if (!data || !data.ok) {
+    alert("업로드 실패: " + (data && data.error ? data.error : res.status));
+    return false;
+  }
+  return true;
 }
 
 // 현재 폼 상태 전체 초기화(편집 로드 직전에 호출).
@@ -1480,6 +1609,7 @@ async function loadReleased() {
     releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
     releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
     renderReleased();
+    if (document.getElementById("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
     updateDupHint();
   } catch (e) {
     releasedSkins = [];
@@ -1529,8 +1659,11 @@ function updateLifetimePassCodeHint() {
     hint.textContent = `형식 오류: ${bad.join(", ")}`;
     hint.style.color = "var(--danger)";
   } else if (skinTargetOn && !/^[A-Za-z0-9_]+$/.test(skinId)) {
-    hint.textContent = "개별 테마 코드는 skinId를 입력해야 합니다.";
+    hint.textContent = "개별 테마 코드는 출시된 테마를 선택해야 합니다.";
     hint.style.color = "var(--sub)";
+  } else if (skinTargetOn && releasedSkins.length && !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase())) {
+    hint.textContent = `'${skinId}'는 출시된 테마 목록에 없어요 — 목록에서 선택하세요.`;
+    hint.style.color = "var(--danger)";
   } else if (skinTargetOn) {
     hint.textContent = `${codes.length}개 코드 준비됨 · ${skinId} 테마 해금`;
     hint.style.color = "var(--ok)";
@@ -1555,7 +1688,9 @@ function generateLifetimePassCodes() {
   updateLifetimePassCodeHint();
 }
 
-function makeLifetimePassMarker() {
+// 검증 후 해금 코드 마커 {blob, filename} 생성. 문제가 있으면 alert 후 null.
+// JSON 다운로드(makeLifetimePassMarker)와 원클릭 업로드(uploadLifetimePassMarker) 공용.
+function buildLifetimePassMarker() {
   const targetType = document.getElementById("giftTargetType").value;
   const skinId = document.getElementById("giftTargetSkinId").value.trim();
   const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
@@ -1566,8 +1701,11 @@ function makeLifetimePassMarker() {
   if (!codes.length) errors.push("해금 코드를 입력하거나 자동 생성하세요.");
   if (targetType === "lifetime" && !expiresAt) errors.push("입력 가능 기한을 선택하세요.");
   if (targetType === "skin" && !/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("개별 테마 skinId는 영문/숫자/_ 만 사용하세요.");
+  if (targetType === "skin" && /^[A-Za-z0-9_]+$/.test(skinId) && releasedSkins.length &&
+      !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase()))
+    errors.push(`'${skinId}'는 출시된 테마 목록에 없어요. 목록에서 선택하세요.`);
   codes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
-  if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return; }
+  if (errors.length) { alert("아직 다음 문제가 있어요:\n\n- " + errors.join("\n- ")); return null; }
 
   const marker = targetType === "skin" ? {
     source: "skin-builder",
@@ -1586,15 +1724,143 @@ function makeLifetimePassMarker() {
     })),
   };
   const blob = new Blob([JSON.stringify(marker, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = targetType === "skin"
+  const filename = targetType === "skin"
     ? `${skinId}.skin-gift-codes.json`
     : `lifetime-pass-${expiresAt}.lifetime-pass-codes.json`;
+  return { blob, filename };
+}
+
+// JSON 만들기 — 파일로 다운로드(수동 업로드용, 기존 방식).
+function makeLifetimePassMarker() {
+  const r = buildLifetimePassMarker();
+  if (!r) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(r.blob);
+  a.download = r.filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   document.getElementById("status").innerHTML =
-    `<b>${escapeHtml(a.download)}</b> 저장됨 → <b>업로드</b>하면 해금 코드가 catalog에 병합됩니다.`;
+    `<b>${escapeHtml(r.filename)}</b> 저장됨 → <b>📤 직접 업로드</b>로 _inbox에 올리면 해금 코드가 catalog에 병합됩니다.`;
+}
+
+// 코드 업로드 — 스킨 자동 업로드처럼 딸깍 한 번으로 _inbox에 커밋.
+async function uploadLifetimePassMarker() {
+  if (!inboxReady()) { alert("자동 업로드가 설정되지 않았습니다. 'JSON 만들기'로 받아 '📤 직접 업로드'를 사용하세요."); return; }
+  const r = buildLifetimePassMarker();
+  if (!r) return;
+  const btn = document.getElementById("uploadLifetimePassMarker");
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = "업로드 중…";
+  try {
+    const ok = await commitToInbox(r.filename, r.blob, `chore(skin): _inbox/${r.filename} (해금 코드 업로드)`);
+    if (ok) {
+      document.getElementById("status").innerHTML =
+        `✅ <b>${escapeHtml(r.filename)}</b> 업로드 완료 → 1~2분 뒤 Actions에서 해금 코드가 catalog에 자동 반영됩니다.`;
+    }
+  } catch (e) {
+    alert("업로드 중 오류: " + e.message);
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
+  }
+}
+
+/* ---------- 개별 테마 skinId 자동완성 콤보 ----------
+   출시된 스킨(releasedSkins)에서만 고르게 한다. 입력하면 하단에 일치 항목만 뜨고,
+   클릭/방향키+Enter로 선택. 목록에 없는 값은 코드 생성 시 검증에서 막힌다. */
+let giftComboActive = -1; // 키보드 하이라이트 인덱스
+
+function giftComboMatches() {
+  const q = document.getElementById("giftTargetSkinId").value.trim().toLowerCase();
+  return releasedSkins.filter(s =>
+    !q ||
+    (s.skinId || "").toLowerCase().includes(q) ||
+    (s.name || "").toLowerCase().includes(q) ||
+    (s.localized?.en?.name || "").toLowerCase().includes(q));
+}
+
+function renderGiftCombo() {
+  const ul = document.getElementById("giftSkinComboList");
+  if (!ul) return;
+  const list = giftComboMatches();
+  if (giftComboActive >= list.length) giftComboActive = -1;
+  if (!releasedSkins.length) {
+    ul.innerHTML = `<li class="combo-empty">출시된 스킨을 불러오는 중…</li>`;
+    return;
+  }
+  if (!list.length) {
+    ul.innerHTML = `<li class="combo-empty">일치하는 출시 스킨이 없어요</li>`;
+    return;
+  }
+  ul.innerHTML = "";
+  list.forEach((s, i) => {
+    const free = s.isFree || !s.price || Number(s.price) <= 0;
+    const price = free ? "무료" : `${Number(s.price).toLocaleString()}원`;
+    const li = document.createElement("li");
+    li.className = "combo-item" + (i === giftComboActive ? " active" : "");
+    li.setAttribute("role", "option");
+    li.dataset.skinId = s.skinId || "";
+    li.innerHTML =
+      `<div class="ci-id">${escapeHtml(s.skinId || "?")}</div>` +
+      `<div class="ci-name">${escapeHtml(s.name || "(이름 없음)")} · ${price}</div>`;
+    li.addEventListener("mousedown", (e) => { // blur보다 먼저 처리되도록 mousedown
+      e.preventDefault();
+      selectGiftSkin(s.skinId || "");
+    });
+    ul.appendChild(li);
+  });
+}
+
+function openGiftCombo() {
+  const combo = document.getElementById("giftSkinCombo");
+  if (!combo) return;
+  renderGiftCombo();
+  combo.classList.add("open");
+  document.getElementById("giftTargetSkinId").setAttribute("aria-expanded", "true");
+}
+
+function closeGiftCombo() {
+  const combo = document.getElementById("giftSkinCombo");
+  if (!combo) return;
+  combo.classList.remove("open");
+  document.getElementById("giftTargetSkinId").setAttribute("aria-expanded", "false");
+  giftComboActive = -1;
+}
+
+function selectGiftSkin(id) {
+  const input = document.getElementById("giftTargetSkinId");
+  input.value = id;
+  closeGiftCombo();
+  updateLifetimePassCodeHint();
+  input.focus();
+}
+
+function setupGiftSkinCombo() {
+  const input = document.getElementById("giftTargetSkinId");
+  const combo = document.getElementById("giftSkinCombo");
+  if (!input || !combo) return;
+  input.addEventListener("focus", openGiftCombo);
+  input.addEventListener("input", () => { giftComboActive = -1; openGiftCombo(); });
+  input.addEventListener("keydown", (e) => {
+    const items = combo.querySelectorAll(".combo-item");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!combo.classList.contains("open")) { openGiftCombo(); return; }
+      if (!items.length) return;
+      e.preventDefault();
+      giftComboActive += (e.key === "ArrowDown" ? 1 : -1);
+      if (giftComboActive < 0) giftComboActive = items.length - 1;
+      if (giftComboActive >= items.length) giftComboActive = 0;
+      items.forEach((it, i) => it.classList.toggle("active", i === giftComboActive));
+      items[giftComboActive].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      if (combo.classList.contains("open") && giftComboActive >= 0 && items[giftComboActive]) {
+        e.preventDefault();
+        selectGiftSkin(items[giftComboActive].dataset.skinId || "");
+      }
+    } else if (e.key === "Escape") {
+      closeGiftCombo();
+    }
+  });
+  input.addEventListener("blur", () => { setTimeout(closeGiftCombo, 120); });
 }
 
 function setupOpsPanel() {
@@ -1634,17 +1900,24 @@ document.getElementById("createdAt").value = nowLocalDateTime();
 });
 document.getElementById("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
 document.getElementById("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
+document.getElementById("uploadLifetimePassMarker").addEventListener("click", uploadLifetimePassMarker);
 document.getElementById("makeBtn").addEventListener("click", makeZip);
 document.getElementById("autoUploadBtn").addEventListener("click", autoUpload);
-// 자동 업로드(Worker)가 설정 안 됐으면 그 버튼은 숨긴다(직접 업로드만 사용).
+document.getElementById("loginForm").addEventListener("submit", submitLogin);
+document.getElementById("logoutBtn").addEventListener("click", logout);
+// 자동 업로드(Worker)가 설정 안 됐으면 원클릭 업로드 버튼들은 숨긴다(직접 업로드만 사용).
 if (!inboxReady()) {
-  const au = document.getElementById("autoUploadBtn");
-  if (au) au.style.display = "none";
+  ["autoUploadBtn", "uploadLifetimePassMarker"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
 }
 refresh();
 updateLifetimePassCodeHint();
 setupOpsPanel();
 setupReleasedPanel();
+setupGiftSkinCombo();
+initializeAuth();
 </script>
 </body>
 </html>

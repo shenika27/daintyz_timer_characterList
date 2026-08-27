@@ -8,7 +8,13 @@ OWNER = "shenika27"
 REPO = "daintyz_timer_characterList"
 BRANCH = "main"
 ALLOW_ORIGIN = "https://shenika27.github.io"
+SESSION_TTL_SECONDS = "28800"
 
-# 비밀(GITHUB_TOKEN, ACCESS_KEY)은 여기 적지 말고 아래 명령으로 넣으세요:
+# timerWidget API Worker와 같은 D1을 사용한다. 인증 테이블은 auth_ 접두사로 분리한다.
+[[d1_databases]]
+binding = "DB"
+database_name = "daintyz-timerwidget"
+database_id = "b9fb55a2-5348-4bf2-a6de-4b75b5b1b9bc"
+
+# 비밀(GITHUB_TOKEN)은 여기 적지 말고 아래 명령으로 넣으세요:
 #   npx wrangler secret put GITHUB_TOKEN
-#   npx wrangler secret put ACCESS_KEY
