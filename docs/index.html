@@ -78,6 +78,12 @@
   }
   textarea { min-height: 84px; resize: vertical; }
   input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  /* 비활성/읽기전용 입력칸은 회색으로 눈에 띄게 잠긴 상태 표시 */
+  input:disabled, textarea:disabled, select:disabled,
+  input[readonly], textarea[readonly] {
+    background: var(--chip); color: var(--sub);
+    cursor: not-allowed; opacity: .6;
+  }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
   .check input { width: 16px; height: 16px; }
 
@@ -139,9 +145,16 @@
   .gift-issued-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .gift-issued-head h4 { margin:0; font-size:14px; }
   .gift-issued-list { margin-top:9px; display:grid; gap:8px; }
-  .gift-issued-item { padding:10px 11px; border:1px solid var(--line); border-radius:9px; background:var(--bg); }
+  .gift-issued-item { padding:10px 11px; border:1px solid var(--line); border-radius:9px; background:var(--bg); display:flex; align-items:flex-start; gap:10px; }
+  .gift-issued-body { flex:1; min-width:0; }
   .gift-issued-title { font-weight:800; color:var(--ink); }
   .gift-issued-meta { margin-top:4px; color:var(--sub); font-size:12px; line-height:1.55; }
+  .gift-issued-del { flex:none; border:1px solid var(--line); background:var(--card); color:var(--danger); cursor:pointer; font-size:12px; font-weight:700; border-radius:7px; padding:5px 9px; }
+  .gift-issued-del:hover { border-color:var(--danger); }
+  .gift-issued-del:disabled { opacity:.5; cursor:default; }
+  .gift-issued-revoked { flex:none; align-self:center; font-size:11px; font-weight:700; color:var(--sub); border:1px solid var(--line); border-radius:7px; padding:4px 8px; }
+  .gift-issued-item.is-deleting { opacity:.55; }
+  .gift-issued-item.is-revoked { opacity:.6; }
   .clear-x { border:none; background:none; color: var(--danger); cursor:pointer; font-size: 18px; padding: 0 4px; }
 
   details.opt { border: 1px solid var(--line); border-radius: 10px; padding: 0; margin-top: 6px; }
@@ -283,7 +296,8 @@
 <header>
   <div class="header-copy">
     <h1>🎨 캐릭터 타이머 스킨 빌더</h1>
-    <p>아래 항목을 채우고 <b>[⬆ 자동 업로드]</b> 한 번이면 끝입니다. (또는 <b>[⬇ zip 만들기]</b>로 받아 <b>[📤 직접 업로드]</b>) 나머지(배치·등록)는 자동으로 처리돼요.</p>
+    <p>아래 항목을 채우고 <b>[⬆ 자동 업로드]</b>를 누르면 끝입니다.<br>
+      배치·등록은 자동으로 처리돼요. (또는 <b>[⬇ zip 만들기]</b>로 받아 <b>[📤 직접 업로드]</b>)</p>
   </div>
   <div class="auth-user"><span id="authUsername"></span><button type="button" id="logoutBtn">로그아웃</button></div>
 </header>
@@ -292,7 +306,8 @@
   <!-- 1. 기본 정보 -->
   <section class="card">
     <h2>1. 기본 정보</h2>
-    <p class="hint">skinId는 테마의 고유 ID입니다(영문·숫자·_, 한 번 정하면 바꾸지 마세요). 기존 ID로 만들면 그 테마를 덮어씁니다(수정).</p>
+    <p class="hint">skinId는 테마의 고유 ID입니다. 영문·숫자·_만 쓸 수 있고, 한 번 정하면 바꾸지 마세요.<br>
+      기존 ID로 다시 만들면 그 테마를 덮어씁니다(= 수정).</p>
     <div class="grid two">
       <label class="field"><span>skinId (예: cha07) <b style="color:var(--danger)">*</b></span>
         <input type="text" id="skinId" placeholder="cha07" autocomplete="off"></label>
@@ -324,28 +339,32 @@
     </div>
     <div style="margin-top:10px">
       <label class="check"><input type="checkbox" id="hidden"> 🚫 상점에 노출 안 함(숨김)</label>
-      <p class="hint" style="margin:4px 0 0 24px">상점 목록에서 빠집니다(기프트코드·링크 전용 스킨용). 이미 보유한 사용자의 창고에는 정상 표시됩니다.</p>
+      <p class="hint" style="margin:4px 0 0 24px">상점 목록에서 빠집니다(기프트코드·링크 전용 스킨용).<br>
+        이미 보유한 사용자의 창고에는 정상 표시됩니다.</p>
     </div>
     <div class="grid two" style="margin-top:12px">
       <label class="field"><span>한정구매 종료일 (선택 — 당일까지 판매)</span>
         <input type="date" id="saleEnd" autocomplete="off"></label>
       <div></div>
     </div>
-    <p class="hint" id="saleHint" style="margin:6px 0 0">업로드 즉시 판매가 시작됩니다. 종료일을 지정하면 그날까지만 구매 가능하고, 지나면 상점에 '기간만료'로 잠겨 표시됩니다(이미 보유한 사용자는 계속 사용). 비우면 상시 판매.</p>
+    <p class="hint" id="saleHint" style="margin:6px 0 0">업로드하면 즉시 판매가 시작됩니다. 비우면 상시 판매.<br>
+      종료일을 지정하면 그날까지만 구매할 수 있고, 지나면 상점에 ‘기간만료’로 잠겨 표시됩니다(이미 보유한 사용자는 계속 사용).</p>
   </section>
 
   <!-- 2. 캐릭터 상태 -->
   <section class="card">
     <h2>2. 캐릭터 상태별 프레임</h2>
-    <p class="hint">한 장이면 정지 이미지, 여러 장이면 아래 간격(ms)으로 애니메이션됩니다(미리보기로 바로 확인). <b>프레임은 투명 배경 PNG/WebP, 한 변 1024px 이하</b>만 받습니다.</p>
+    <p class="hint">한 장이면 정지 이미지, 여러 장이면 아래 간격(ms)으로 애니메이션됩니다(미리보기로 바로 확인).<br>
+      <b>프레임은 투명 배경 PNG/WebP, 한 변 1024px 이하</b>만 받습니다.</p>
     <div class="grid" id="stateWrap"></div>
   </section>
 
   <!-- 2-1. 특수 모션 (인터루드) -->
   <section class="card">
     <h2>2-1. 특수 모션 <span style="font-weight:400; color:var(--sub); font-size:14px;">(선택)</span></h2>
-    <p class="hint">작동(running) 중 <b>N분마다 M초 동안</b> 잠깐 끼어드는 모션입니다(예: 10분마다 5초 물마시기). 스킨마다 자유롭게 정할 수 있어요.
-      프레임을 올리고 아래 주기·길이를 <b>둘 다</b> 채우면 적용됩니다. 안 쓰려면 셋 다 비우세요. <b>화면이 켜져 있을 때만</b> 보입니다.</p>
+    <p class="hint">작동(running) 중 <b>N분마다 M초 동안</b> 잠깐 끼어드는 모션입니다(예: 10분마다 5초 물 마시기). 스킨마다 자유롭게 정할 수 있어요.<br>
+      프레임을 올리고 아래 주기·길이를 <b>둘 다</b> 채우면 적용됩니다. 안 쓰려면 셋 다 비우세요.<br>
+      <b>화면이 켜져 있을 때만</b> 보입니다.</p>
     <div class="itl-cfg" style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:4px 0 12px;">
       <label>주기 <input type="number" id="itlEveryMin" min="0" step="0.5" placeholder="예: 10" style="width:90px;"> 분마다</label>
       <label>길이 <input type="number" id="itlDurSec" min="0" step="0.5" placeholder="예: 5" style="width:90px;"> 초 동안</label>
@@ -356,20 +375,21 @@
   <!-- 3. 타이머 디자인 -->
   <section class="card">
     <h2>3. 타이머 디자인</h2>
-    <p class="hint">모든 테마는 타이머 디자인을 포함합니다(필수). 배경·버튼·숫자폰트를 지정하세요. 비워둔 항목은 앱 내장 기본값으로 폴백됩니다.</p>
+    <p class="hint">모든 테마는 타이머 디자인을 포함합니다(필수). 배경·버튼·숫자 폰트를 지정하세요.<br>
+      비워둔 항목은 앱 내장 기본값으로 대체됩니다.</p>
 
     <div id="timerBody" style="margin-top:4px">
       <div class="grid">
         <div class="state-card">
           <h3>타이머 배경 PNG</h3>
-          <p class="sub">박스·구분선이 모두 그려진 한 장. 가로 레이아웃(시간 좌 / 버튼 우) 기준. 없으면 내장 박스로 폴백.</p>
+          <p class="sub">박스·구분선이 모두 그려진 한 장. 가로 레이아웃(시간 좌 / 버튼 우) 기준.<br>없으면 앱 내장 박스로 대체됩니다.</p>
           <div id="asset_background"></div>
         </div>
 
         <details class="opt">
           <summary>버튼 그림 (선택)</summary>
           <div class="body grid">
-            <p class="sub" style="margin:0">올리지 않은 버튼은 앱 기본 기호로 표시됩니다. play/pause는 시작·일시정지 상태에 따라 자동으로 바뀝니다.</p>
+            <p class="sub" style="margin:0">올리지 않은 버튼은 앱 기본 기호로 표시됩니다.<br>play/pause는 시작·일시정지 상태에 따라 자동으로 바뀝니다.</p>
             <div id="asset_minus"></div>
             <div id="asset_plus"></div>
             <div id="asset_play"></div>
@@ -388,7 +408,7 @@
         <details class="opt">
           <summary>숫자 폰트 (선택)</summary>
           <div class="body grid">
-            <p class="sub" style="margin:0">.ttf를 올리면 숫자를 그 폰트로 렌더링합니다(이때 크기는 영역에 맞춰지고 sizeSp는 무시). 색만 바꾸려면 폰트는 비우고 색만 지정하세요.</p>
+            <p class="sub" style="margin:0">.ttf를 올리면 숫자를 그 폰트로 렌더링합니다(이때 크기는 영역에 맞춰지고 sizeSp는 무시).<br>색만 바꾸려면 폰트는 비우고 색만 지정하세요.</p>
             <div id="asset_font"></div>
             <div class="grid two">
               <label class="field"><span>숫자 색 (#RRGGBB, 선택)</span>
@@ -414,11 +434,12 @@
   <!-- 4. 미리보기 이미지 -->
   <section class="card">
     <h2>4. 미리보기 이미지</h2>
-    <p class="hint"><b>썸네일은 필수</b>입니다(상점 목록·타이머 탭에 뜨는 대표 이미지). 미리보기는 여러 장 올리면 상세화면 갤러리에 순서대로 표시됩니다.</p>
+    <p class="hint"><b>썸네일은 필수</b>입니다(상점 목록·타이머 탭에 뜨는 대표 이미지).<br>
+      미리보기는 여러 장 올리면 상세화면 갤러리에 순서대로 표시됩니다.</p>
     <div class="grid">
       <div class="state-card req">
         <h3>썸네일 (thumb.png)</h3>
-        <p class="sub">상점 카드·타이머 탭에 뜨는 대표 1장. 정사각형 권장(아니면 경고), 한 변 1024px 이하.</p>
+        <p class="sub">상점 카드·타이머 탭에 뜨는 대표 1장.<br>정사각형 권장(아니면 경고), 한 변 1024px 이하.</p>
         <div id="asset_thumb"></div>
       </div>
       <div class="state-card">
@@ -440,7 +461,8 @@
   </div>
   <div class="ops-body">
     <h3>기프트/해금 코드</h3>
-    <p class="hint">앱 설정의 기프트코드에 입력할 코드를 만듭니다. 평생이용권 또는 개별 테마를 선택해 JSON을 만든 뒤 _inbox에 업로드하세요.</p>
+    <p class="hint">앱 설정의 기프트코드에 입력할 코드를 만듭니다.<br>
+      평생이용권 또는 개별 테마를 선택해 JSON을 만든 뒤 _inbox에 업로드하세요.</p>
     <div class="grid">
       <label class="field"><span>해금 대상</span>
         <select id="giftTargetType">
@@ -455,20 +477,23 @@
         </div></label>
       <label class="field"><span>코드명/라벨</span>
         <input type="text" id="giftLabel" maxlength="100" placeholder="예: 달토끼 쿠폰" autocomplete="off"></label>
-      <label class="field"><span>코드 자동 생성 개수</span>
-        <input type="number" id="lifetimePassGenerateCount" min="1" max="100" step="1" value="10" autocomplete="off"></label>
-      <label class="field" id="giftExpiresField"><span>입력 가능 기한 (비우면 무기한)</span>
-        <input type="date" id="lifetimePassExpiresAt" autocomplete="off"></label>
       <label class="field" id="giftUsageField"><span>사용 제한</span>
         <select id="lifetimePassUsageLimit">
           <option value="unlimited">제한 없음</option>
           <option value="once">1회 소진</option>
         </select></label>
+      <label class="field"><span>코드 자동 생성 개수</span>
+        <input type="number" id="lifetimePassGenerateCount" min="1" max="100" step="1" value="10" autocomplete="off">
+        <small style="display:block;margin-top:5px;color:var(--sub)">사용 제한이 ‘제한 없음’이면 1개만 만들 수 있어요.</small></label>
+      <label class="field" id="giftExpiresField"><span>입력 가능 기한 (비우면 무기한)</span>
+        <input type="date" id="lifetimePassExpiresAt" autocomplete="off"></label>
       <label class="field"><span class="codes-head">해금 코드
           <button class="pick pick-sm" id="generateLifetimePassCodes" type="button">자동 생성</button></span>
         <textarea id="lifetimePassCodes" placeholder="예: PASS-2026-ABCD, VIP-7DAYS"></textarea></label>
     </div>
-    <p class="hint" style="margin:8px 0 0">영문·숫자·<code>-</code>만 허용합니다. 저장 파일에는 SHA-256 해시만 들어가므로, 만든 코드는 따로 보관해 주세요. 개별 테마 코드는 catalog의 해당 skinId에 병합됩니다.</p>
+    <p class="hint" style="margin:8px 0 0">코드는 영문·숫자·<code>-</code>만 쓸 수 있습니다.<br>
+      저장 파일에는 SHA-256 해시만 들어가니, 만든 코드는 따로 안전하게 보관해 주세요.<br>
+      개별 테마 코드는 catalog의 해당 skinId에 병합됩니다.</p>
     <div id="lifetimePassCodeHint" style="margin:6px 0 0;font-size:12.5px;color:var(--sub)"></div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="pick" id="makeLifetimePassMarker" type="button">JSON 만들기</button>
@@ -542,11 +567,61 @@ const previewFrames = [];           // [{ id, file, url }]
 
 let frameSeq = 0;
 
+/* ---------- 공용 헬퍼 ---------- */
+const $ = (id) => document.getElementById(id);
+
 function extOf(name, fallback) {
   const m = /\.([a-zA-Z0-9]+)$/.exec(name || "");
   return m ? m[1].toLowerCase() : fallback;
 }
 function pad2(n) { return String(n).padStart(2, "0"); }
+
+// Blob을 파일로 즉시 다운로드(수동 업로드용 공통).
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// 드롭존 하나에 "클릭→파일선택 + 드래그&드롭" 배선. 고른 파일은 onFiles(FileList)로 넘긴다.
+// 숨은 <input type=file>를 드롭존 뒤에 만들어 붙인다(상태·인터루드·미리보기 카드 공통).
+function wireDropZone(drop, onFiles, { accept = "image/*", multiple = true } = {}) {
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = accept; input.multiple = multiple; input.style.display = "none";
+  drop.after(input);
+  drop.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { onFiles(input.files); input.value = ""; });
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); onFiles(e.dataTransfer.files); });
+  return input;
+}
+
+// pingpong(왕복) 확장: [a,b,c,d] → [a,b,c,d,c,b]. 2프레임 이하는 그대로.
+// 재생 미리보기·skin.json frames 이름 확장에서 동일 규칙으로 재사용.
+function expandPingpong(arr, pingpong) {
+  return (pingpong && arr.length > 2) ? arr.concat(arr.slice(1, -1).reverse()) : arr;
+}
+
+// 프레임 목록 <li>(썸네일 + 파일명 + 앞으로/뒤로/삭제). 상태·미리보기 프레임 공통.
+function frameListItem(url, name, { onUp, onDown, onDel }) {
+  const li = document.createElement("li");
+  li.className = "frame";
+  li.innerHTML = `
+    <img src="${url}" alt="">
+    <div class="nm" title="${name}">${name}</div>
+    <div class="ops">
+      <button data-act="up" title="앞으로">▲</button>
+      <button data-act="down" title="뒤로">▼</button>
+      <button data-act="del" class="del" title="삭제">✕</button>
+    </div>`;
+  li.querySelector('[data-act=up]').onclick = onUp;
+  li.querySelector('[data-act=down]').onclick = onDown;
+  li.querySelector('[data-act=del]').onclick = onDel;
+  return li;
+}
 
 // 기프트코드 정규화 — 앱(GiftCodeRedeemer.normalize)과 반드시 동일: 공백제거 + 대문자.
 function normalizeGift(c) { return (c || "").trim().replace(/\s+/g, "").toUpperCase(); }
@@ -622,80 +697,47 @@ function sha256(ascii) {
   return result;
 }
 
-/* ---------- 캐릭터 상태 카드 ---------- */
-function buildStateCards() {
-  const wrap = document.getElementById("stateWrap");
-  STATES.forEach(s => {
-    const card = document.createElement("div");
-    card.className = "state-card" + (s.req ? " req" : "");
-    card.innerHTML = `
-      <h3>${s.title}</h3>
-      <p class="sub">${s.sub}</p>
-      <div class="drop" data-state="${s.key}">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
-      <ul class="frames" id="frames_${s.key}"></ul>
-      <div class="anim-row"><div class="anim-box"><img id="anim_${s.key}" alt=""></div><span class="anim-cap" id="animcap_${s.key}">프레임 없음</span></div>
-      <div class="dur">프레임 간격 <input type="number" min="50" step="50" value="${s.defDur}" data-dur="${s.key}"> ms</div>
-      <label class="loopchk"><input type="checkbox" data-pingpong="${s.key}"> 순환(왕복) — 01-02-03-04-03-02 식으로 되돌아오며 한 세트</label>`;
-    wrap.appendChild(card);
-
-    const drop = card.querySelector(".drop");
-    const input = document.createElement("input");
-    input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
-    card.appendChild(input);
-    drop.addEventListener("click", () => input.click());
-    input.addEventListener("change", () => { addFrames(s.key, input.files); input.value = ""; });
-    drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
-    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-    drop.addEventListener("drop", e => {
-      e.preventDefault(); drop.classList.remove("over");
-      addFrames(s.key, e.dataTransfer.files);
-    });
-    card.querySelector("[data-dur]").addEventListener("input", e => {
-      store[s.key].dur = parseInt(e.target.value) || s.defDur; renderStatePreview(s.key); refresh();
-    });
-    card.querySelector("[data-pingpong]").addEventListener("change", e => {
-      store[s.key].pingpong = e.target.checked; renderStatePreview(s.key); refresh();
-    });
-    renderStatePreview(s.key);
-  });
-}
-
-/* ---------- 특수 모션(인터루드) 카드 ---------- */
-// 상태 카드와 동일한 프레임 UI(드롭·목록·미리보기·간격)를 stateKey "interlude"로 재사용한다.
-// 주기(분)·길이(초)는 이 섹션 상단의 별도 입력칸(itlEveryMin/itlDurSec)에서 읽는다.
-function buildInterludeCard() {
-  const wrap = document.getElementById("interludeWrap");
+/* ---------- 프레임 카드(상태/인터루드 공통) ----------
+   상태 카드와 인터루드 카드는 프레임 UI(드롭·목록·미리보기·간격·왕복)가 완전히 같다.
+   cfg = { key, title, sub, defDur, req } 하나로 둘 다 만든다. */
+function buildFrameCard(host, cfg) {
   const card = document.createElement("div");
-  card.className = "state-card";
+  card.className = "state-card" + (cfg.req ? " req" : "");
   card.innerHTML = `
-    <h3>인터루드 프레임</h3>
-    <p class="sub">이 특수 모션에서 재생할 그림 (예: 물 마시는 동작)</p>
-    <div class="drop" data-state="interlude">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
-    <ul class="frames" id="frames_interlude"></ul>
-    <div class="anim-row"><div class="anim-box"><img id="anim_interlude" alt=""></div><span class="anim-cap" id="animcap_interlude">프레임 없음</span></div>
-    <div class="dur">프레임 간격 <input type="number" min="50" step="50" value="${ITL_DEF_DUR}" data-dur="interlude"> ms</div>
-    <label class="loopchk"><input type="checkbox" data-pingpong="interlude"> 순환(왕복) — 01-02-03-04-03-02 식으로 되돌아오며 한 세트</label>`;
-  wrap.appendChild(card);
+    <h3>${cfg.title}</h3>
+    <p class="sub">${cfg.sub}</p>
+    <div class="drop" data-state="${cfg.key}">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
+    <ul class="frames" id="frames_${cfg.key}"></ul>
+    <div class="anim-row"><div class="anim-box"><img id="anim_${cfg.key}" alt=""></div><span class="anim-cap" id="animcap_${cfg.key}">프레임 없음</span></div>
+    <div class="dur">프레임 간격 <input type="number" min="50" step="50" value="${cfg.defDur}" data-dur="${cfg.key}"> ms</div>
+    <label class="loopchk"><input type="checkbox" data-pingpong="${cfg.key}"> 순환(왕복) — 01-02-03-04-03-02 식으로 되돌아오며 한 세트</label>`;
+  host.appendChild(card);
 
-  const drop = card.querySelector(".drop");
-  const input = document.createElement("input");
-  input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
-  card.appendChild(input);
-  drop.addEventListener("click", () => input.click());
-  input.addEventListener("change", () => { addFrames("interlude", input.files); input.value = ""; });
-  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addFrames("interlude", e.dataTransfer.files); });
+  wireDropZone(card.querySelector(".drop"), files => addFrames(cfg.key, files));
   card.querySelector("[data-dur]").addEventListener("input", e => {
-    store.interlude.dur = parseInt(e.target.value) || ITL_DEF_DUR; renderStatePreview("interlude"); refresh();
+    store[cfg.key].dur = parseInt(e.target.value) || cfg.defDur; renderStatePreview(cfg.key); refresh();
   });
   card.querySelector("[data-pingpong]").addEventListener("change", e => {
-    store.interlude.pingpong = e.target.checked; renderStatePreview("interlude"); refresh();
+    store[cfg.key].pingpong = e.target.checked; renderStatePreview(cfg.key); refresh();
+  });
+  renderStatePreview(cfg.key);
+}
+
+function buildStateCards() {
+  const wrap = $("stateWrap");
+  STATES.forEach(s => buildFrameCard(wrap, s));
+}
+
+// 특수 모션(인터루드): 상태 카드와 동일한 프레임 UI를 key "interlude"로 재사용.
+// 주기(분)·길이(초)는 이 섹션 상단의 별도 입력칸(itlEveryMin/itlDurSec)에서 읽는다.
+function buildInterludeCard() {
+  buildFrameCard($("interludeWrap"), {
+    key: "interlude", req: false, defDur: ITL_DEF_DUR,
+    title: "인터루드 프레임", sub: "이 특수 모션에서 재생할 그림 (예: 물 마시는 동작)",
   });
   // 주기·길이 입력은 값만 바뀌어도 검증/상태를 갱신.
-  document.getElementById("itlEveryMin").addEventListener("input", refresh);
-  document.getElementById("itlDurSec").addEventListener("input", refresh);
-  renderStatePreview("interlude");
+  $("itlEveryMin").addEventListener("input", refresh);
+  $("itlDurSec").addEventListener("input", refresh);
 }
 
 /* ---------- 상태 프레임 애니메이션 미리보기 ---------- */
@@ -703,14 +745,12 @@ const animTimers = {};
 
 // 재생 순서 objectURL 배열(pingpong 반영) — frameSet()의 이름 확장과 동일 규칙.
 function animUrls(stateKey) {
-  let urls = store[stateKey].frames.map(fr => fr.url);
-  if (store[stateKey].pingpong && urls.length > 2) urls = urls.concat(urls.slice(1, -1).reverse());
-  return urls;
+  return expandPingpong(store[stateKey].frames.map(fr => fr.url), store[stateKey].pingpong);
 }
 
 function renderStatePreview(stateKey) {
-  const img = document.getElementById("anim_" + stateKey);
-  const cap = document.getElementById("animcap_" + stateKey);
+  const img = $("anim_" + stateKey);
+  const cap = $("animcap_" + stateKey);
   if (!img || !cap) return;
   if (animTimers[stateKey]) { clearInterval(animTimers[stateKey]); animTimers[stateKey] = null; }
   const urls = animUrls(stateKey);
@@ -739,6 +779,17 @@ function imageSize(file) {
   });
 }
 
+// 크기를 읽어 한 변이 MAX_DIM 초과면 alert 후 null. 통과하면 {w,h}.
+// subject는 오류문 주어(조사 포함) — 예: "'foo.png'은(는)", "썸네일이".
+async function checkImageSize(file, subject) {
+  let sz; try { sz = await imageSize(file); } catch (e) { alert(e.message); return null; }
+  if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
+    alert(`${subject} ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요.`);
+    return null;
+  }
+  return sz;
+}
+
 async function addFrames(stateKey, fileList) {
   for (const f of [...fileList]) {
     if (!f.type.startsWith("image/")) continue;
@@ -746,39 +797,25 @@ async function addFrames(stateKey, fileList) {
       alert(`'${f.name}'은(는) ${f.type || "알 수 없는 형식"}입니다.\n캐릭터 프레임은 투명 배경이 필요해 PNG(또는 WebP)만 올릴 수 있어요.`);
       continue;
     }
-    let sz; try { sz = await imageSize(f); } catch (e) { alert(e.message); continue; }
-    if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
-      alert(`'${f.name}'은(는) ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요(위젯은 소형이라 더 클 필요 없음).`);
-      continue;
-    }
+    if (!await checkImageSize(f, `'${f.name}'은(는)`)) continue;
     store[stateKey].frames.push({ id: ++frameSeq, file: f, url: URL.createObjectURL(f) });
   }
   renderFrames(stateKey); refresh();
 }
 
 function renderFrames(stateKey) {
-  const ul = document.getElementById("frames_" + stateKey);
+  const ul = $("frames_" + stateKey);
   ul.innerHTML = "";
   store[stateKey].frames.forEach((fr, i) => {
-    const ext = extOf(fr.file.name, "png");
-    const name = `${stateKey}_${pad2(i + 1)}.${ext}`;
-    const li = document.createElement("li");
-    li.className = "frame";
-    li.innerHTML = `
-      <img src="${fr.url}" alt="">
-      <div class="nm" title="${name}">${name}</div>
-      <div class="ops">
-        <button data-act="up" title="앞으로">▲</button>
-        <button data-act="down" title="뒤로">▼</button>
-        <button data-act="del" class="del" title="삭제">✕</button>
-      </div>`;
-    li.querySelector('[data-act=up]').onclick = () => move(stateKey, i, -1);
-    li.querySelector('[data-act=down]').onclick = () => move(stateKey, i, 1);
-    li.querySelector('[data-act=del]').onclick = () => {
-      URL.revokeObjectURL(fr.url);
-      store[stateKey].frames.splice(i, 1); renderFrames(stateKey); refresh();
-    };
-    ul.appendChild(li);
+    const name = `${stateKey}_${pad2(i + 1)}.${extOf(fr.file.name, "png")}`;
+    ul.appendChild(frameListItem(fr.url, name, {
+      onUp: () => move(stateKey, i, -1),
+      onDown: () => move(stateKey, i, 1),
+      onDel: () => {
+        URL.revokeObjectURL(fr.url);
+        store[stateKey].frames.splice(i, 1); renderFrames(stateKey); refresh();
+      },
+    }));
   });
   renderStatePreview(stateKey);
 }
@@ -796,7 +833,7 @@ function move(stateKey, i, dir) {
 const assetRenderers = {};
 
 function buildAssetSlot(slotId, label, accept) {
-  const host = document.getElementById("asset_" + slotId);
+  const host = $("asset_" + slotId);
   if (!host) return;
   const input = document.createElement("input");
   input.type = "file"; input.accept = accept; input.style.display = "none";
@@ -845,7 +882,7 @@ function outNameFor(slotId, file) {
 let thumbRender = null; // 편집 로드에서 다시 그리기 위해 보관.
 
 function buildThumbSlot() {
-  const host = document.getElementById("asset_thumb");
+  const host = $("asset_thumb");
   const input = document.createElement("input");
   input.type = "file"; input.accept = "image/*"; input.style.display = "none";
   const view = document.createElement("div");
@@ -872,11 +909,8 @@ function buildThumbSlot() {
   input.addEventListener("change", async () => {
     const f = input.files[0]; input.value = "";
     if (!f) return;
-    let sz; try { sz = await imageSize(f); } catch (e) { alert(e.message); return; }
-    if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
-      alert(`썸네일이 ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요.`);
-      return;
-    }
+    const sz = await checkImageSize(f, "썸네일이");
+    if (!sz) return;
     if (sz.w !== sz.h &&
         !confirm(`썸네일이 정사각형이 아닙니다(${sz.w}×${sz.h}).\n상점 카드·타이머 탭에서 잘려 보일 수 있어요. 그래도 사용할까요?`)) return;
     if (previewThumb) URL.revokeObjectURL(previewThumb.url);
@@ -888,51 +922,27 @@ function buildThumbSlot() {
 }
 
 function buildPrevList() {
-  const drop = document.getElementById("prevDrop");
-  const input = document.createElement("input");
-  input.type = "file"; input.accept = "image/*"; input.multiple = true; input.style.display = "none";
-  drop.after(input);
-  drop.addEventListener("click", () => input.click());
-  input.addEventListener("change", () => { addPrev(input.files); input.value = ""; });
-  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); addPrev(e.dataTransfer.files); });
+  wireDropZone($("prevDrop"), addPrev);
 }
 
 async function addPrev(fileList) {
   for (const f of [...fileList]) {
     if (!f.type.startsWith("image/")) continue;
-    let sz; try { sz = await imageSize(f); } catch (e) { alert(e.message); continue; }
-    if (sz.w > MAX_DIM || sz.h > MAX_DIM) {
-      alert(`'${f.name}'은(는) ${sz.w}×${sz.h}px 입니다.\n한 변 ${MAX_DIM}px 이하로 줄여서 올려주세요.`);
-      continue;
-    }
+    if (!await checkImageSize(f, `'${f.name}'은(는)`)) continue;
     previewFrames.push({ id: ++frameSeq, file: f, url: URL.createObjectURL(f) });
   }
   renderPrev(); refresh();
 }
 
 function renderPrev() {
-  const ul = document.getElementById("frames_prev");
+  const ul = $("frames_prev");
   ul.innerHTML = "";
   previewFrames.forEach((fr, i) => {
-    const name = `prev${pad2(i + 1)}.png`;
-    const li = document.createElement("li");
-    li.className = "frame";
-    li.innerHTML = `
-      <img src="${fr.url}" alt="">
-      <div class="nm" title="${name}">${name}</div>
-      <div class="ops">
-        <button data-act="up" title="앞으로">▲</button>
-        <button data-act="down" title="뒤로">▼</button>
-        <button data-act="del" class="del" title="삭제">✕</button>
-      </div>`;
-    li.querySelector('[data-act=up]').onclick = () => movePrev(i, -1);
-    li.querySelector('[data-act=down]').onclick = () => movePrev(i, 1);
-    li.querySelector('[data-act=del]').onclick = () => {
-      URL.revokeObjectURL(fr.url); previewFrames.splice(i, 1); renderPrev(); refresh();
-    };
-    ul.appendChild(li);
+    ul.appendChild(frameListItem(fr.url, `prev${pad2(i + 1)}.png`, {
+      onUp: () => movePrev(i, -1),
+      onDown: () => movePrev(i, 1),
+      onDel: () => { URL.revokeObjectURL(fr.url); previewFrames.splice(i, 1); renderPrev(); refresh(); },
+    }));
   });
 }
 
@@ -965,17 +975,17 @@ const RESERVED_SKIN_IDS = new Set(["cha01"]);
 function isReservedSkinId(id) { return RESERVED_SKIN_IDS.has(String(id || "").trim().toLowerCase()); }
 
 function buildSkinJson() {
-  const skinId = document.getElementById("skinId").value.trim();
-  const name = document.getElementById("name").value.trim();
-  const price = Math.max(0, parseInt(document.getElementById("price").value) || 0);
+  const skinId = $("skinId").value.trim();
+  const name = $("name").value.trim();
+  const price = Math.max(0, parseInt($("price").value) || 0);
   const isFree = price <= 0; // skin.json isFree는 가격에서 도출(가격 자체는 catalog.json에만)
-  const prestige = document.getElementById("prestige").checked;
-  const hidden = document.getElementById("hidden").checked;
-  const saleEnd = document.getElementById("saleEnd").value.trim(); // "yyyy-mm-dd" | ""
-  const description = document.getElementById("description").value.trim();
-  const nameEn = document.getElementById("nameEn").value.trim();
-  const descriptionEn = document.getElementById("descriptionEn").value.trim();
-  const createdAt = document.getElementById("createdAt").value.trim(); // date 인풋 → "yyyy-mm-dd"
+  const prestige = $("prestige").checked;
+  const hidden = $("hidden").checked;
+  const saleEnd = $("saleEnd").value.trim(); // "yyyy-mm-dd" | ""
+  const description = $("description").value.trim();
+  const nameEn = $("nameEn").value.trim();
+  const descriptionEn = $("descriptionEn").value.trim();
+  const createdAt = $("createdAt").value.trim(); // date 인풋 → "yyyy-mm-dd"
   const errors = [];
 
   if (!/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("skinId는 영문/숫자/_ 만 사용하세요.");
@@ -985,11 +995,11 @@ function buildSkinJson() {
   function frameSet(stateKey) {
     const arr = store[stateKey].frames;
     if (!arr.length) return null;
-    let names = arr.map((fr, i) => `${stateKey}_${pad2(i + 1)}.${extOf(fr.file.name, "png")}`);
-    if (store[stateKey].pingpong && names.length > 2) {
-      // 01-02-03-04-03-02 식: 정방향 + 양 끝을 뺀 역방향
-      names = names.concat(names.slice(1, -1).reverse());
-    }
+    // 01-02-03-04-03-02 식: pingpong이면 정방향 + 양 끝을 뺀 역방향으로 이름 확장.
+    const names = expandPingpong(
+      arr.map((fr, i) => `${stateKey}_${pad2(i + 1)}.${extOf(fr.file.name, "png")}`),
+      store[stateKey].pingpong,
+    );
     return {
       frames: names,
       frameDurationMs: store[stateKey].dur,
@@ -1010,8 +1020,8 @@ function buildSkinJson() {
 
   // 특수 모션(인터루드): 프레임 + 주기(분) + 길이(초)가 모두 있어야 적용. 일부만 채우면 조용히 유실되지 않도록 오류로 막는다.
   {
-    const itlEvery = parseFloat(document.getElementById("itlEveryMin").value) || 0;
-    const itlDur   = parseFloat(document.getElementById("itlDurSec").value) || 0;
+    const itlEvery = parseFloat($("itlEveryMin").value) || 0;
+    const itlDur   = parseFloat($("itlDurSec").value) || 0;
     const hasItlFrames = store.interlude.frames.length > 0;
     if (hasItlFrames && itlEvery > 0 && itlDur > 0) {
       if (itlDur > itlEvery * 60) errors.push("특수 모션 길이(초)가 주기(분)보다 깁니다. 길이를 주기 이내로 줄이세요.");
@@ -1039,7 +1049,7 @@ function buildSkinJson() {
     if (assets.background) timer.background = assets.background.outName;
     const btnObj = {};
     BUTTONS.forEach(b => { if (assets[b.key]) btnObj[b.key] = assets[b.key].outName; });
-    const buttonStyle = document.getElementById("buttonStyle").value;
+    const buttonStyle = $("buttonStyle").value;
     timer.buttonStyle = buttonStyle;
     if (Object.keys(btnObj).length) timer.buttons = btnObj;
     if (buttonStyle === "default" && Object.keys(btnObj).length) {
@@ -1050,9 +1060,9 @@ function buildSkinJson() {
 
     const font = {};
     if (assets.font) font.file = assets.font.outName;
-    const fc = document.getElementById("fontColor").value.trim();
-    const fs = document.getElementById("fontSize").value.trim();
-    const ff = document.getElementById("fontFamily").value;
+    const fc = $("fontColor").value.trim();
+    const fs = $("fontSize").value.trim();
+    const ff = $("fontFamily").value;
     if (fc) {
       if (!/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(fc)) errors.push("숫자 색은 #RRGGBB 또는 #AARRGGBB 형식이어야 합니다.");
       else font.color = fc;
@@ -1090,16 +1100,16 @@ function refresh() {
   const { errors, skinId, price } = buildSkinJson();
 
   // 가격 힌트 (유료면 Play Console에 등록할 SKU도 안내)
-  document.getElementById("priceHint").textContent =
+  $("priceHint").textContent =
     price <= 0
       ? "→ 무료 테마"
       : `→ ${price.toLocaleString()}원 · Play SKU: skin_${skinId.toLowerCase()}`;
 
   updateDupHint();
 
-  const status = document.getElementById("status");
-  const btn = document.getElementById("makeBtn");
-  const autoBtn = document.getElementById("autoUploadBtn");
+  const status = $("status");
+  const btn = $("makeBtn");
+  const autoBtn = $("autoUploadBtn");
   if (errors.length) {
     status.innerHTML = `<span class="errs">⚠ ${errors[0]}${errors.length > 1 ? ` (외 ${errors.length - 1}건)` : ""}</span>`;
     btn.disabled = true;
@@ -1167,18 +1177,14 @@ async function buildBundleBlob() {
 
 // ① ⬇ zip 만들기 — 파일로 다운로드(수동 업로드용, 기존 방식).
 async function makeZip() {
-  const btn = document.getElementById("makeBtn");
+  const btn = $("makeBtn");
   const orig = btn.textContent;
   btn.disabled = true; btn.textContent = "압축 중…";
   try {
     const r = await buildBundleBlob();
     if (!r) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(r.blob);
-    a.download = `${r.skinId}.zip`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    document.getElementById("status").innerHTML =
+    downloadBlob(r.blob, `${r.skinId}.zip`);
+    $("status").innerHTML =
       `✅ <b>${r.skinId}.zip</b> 저장됨 → <b>📤 직접 업로드</b>로 올리거나 <b>⬆ 자동 업로드</b>를 쓰세요.`;
   } catch (e) {
     alert("zip 생성 중 오류: " + e.message);
@@ -1190,7 +1196,7 @@ async function makeZip() {
 // ② ⬆ 자동 업로드 — Worker로 _inbox에 곧바로 커밋(원클릭).
 async function autoUpload() {
   if (!inboxReady()) { alert("자동 업로드가 설정되지 않았습니다. '📤 직접 업로드'를 사용하세요."); return; }
-  const btn = document.getElementById("autoUploadBtn");
+  const btn = $("autoUploadBtn");
   const orig = btn.textContent;
   btn.disabled = true; btn.textContent = "압축 중…";
   try {
@@ -1199,7 +1205,7 @@ async function autoUpload() {
     btn.textContent = "업로드 중…";
     const ok = await commitToInbox(`${r.skinId}.zip`, r.blob, `chore(skin): _inbox/${r.skinId}.zip (빌더 업로드)`);
     if (ok) {
-      document.getElementById("status").innerHTML =
+      $("status").innerHTML =
         `✅ <b>${r.skinId}.zip</b> 업로드 완료 → 1~2분 뒤 Actions에서 상점에 자동 반영됩니다.`;
     }
   } catch (e) {
@@ -1219,14 +1225,14 @@ function inboxReady() { return !!INBOX_API_URL; }
 
 function showLogin(message = "") {
   document.body.classList.add("auth-pending");
-  document.getElementById("loginGate").hidden = false;
-  document.getElementById("loginError").textContent = message;
-  document.getElementById("loginPassword").value = "";
-  setTimeout(() => document.getElementById("loginUsername").focus(), 0);
+  $("loginGate").hidden = false;
+  $("loginError").textContent = message;
+  $("loginPassword").value = "";
+  setTimeout(() => $("loginUsername").focus(), 0);
 }
 function showBuilder(username) {
-  document.getElementById("authUsername").textContent = `${username}님`;
-  document.getElementById("loginGate").hidden = true;
+  $("authUsername").textContent = `${username}님`;
+  $("loginGate").hidden = true;
   document.body.classList.remove("auth-pending");
   loadGiftRegistry();
 }
@@ -1246,22 +1252,22 @@ async function initializeAuth() {
 }
 async function submitLogin(event) {
   event.preventDefault();
-  const button = document.getElementById("loginBtn");
-  const error = document.getElementById("loginError");
+  const button = $("loginBtn");
+  const error = $("loginError");
   button.disabled = true; button.textContent = "확인 중…"; error.textContent = "";
   try {
     const res = await fetch(`${INBOX_API_URL}/auth/login`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: document.getElementById("loginUsername").value.trim(),
-        password: document.getElementById("loginPassword").value,
-        rememberMe: document.getElementById("loginRemember").checked,
+        username: $("loginUsername").value.trim(),
+        password: $("loginPassword").value,
+        rememberMe: $("loginRemember").checked,
       }),
       credentials: "include",
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || "로그인에 실패했습니다.");
-    document.getElementById("loginPassword").value = "";
+    $("loginPassword").value = "";
     showBuilder(data.username);
   } catch (e) {
     error.textContent = e.message || "로그인 서버에 연결하지 못했습니다.";
@@ -1326,8 +1332,8 @@ function resetBuilderState() {
   store.interlude.frames = []; store.interlude.pingpong = false; store.interlude.dur = ITL_DEF_DUR;
   { const di = document.querySelector('[data-dur="interlude"]'); if (di) di.value = ITL_DEF_DUR;
     const pi = document.querySelector('[data-pingpong="interlude"]'); if (pi) pi.checked = false;
-    const em = document.getElementById("itlEveryMin"); if (em) em.value = "";
-    const ds = document.getElementById("itlDurSec"); if (ds) ds.value = ""; }
+    const em = $("itlEveryMin"); if (em) em.value = "";
+    const ds = $("itlDurSec"); if (ds) ds.value = ""; }
   Object.keys(assets).forEach(k => { if (assets[k].url) URL.revokeObjectURL(assets[k].url); delete assets[k]; });
   if (previewThumb) { URL.revokeObjectURL(previewThumb.url); previewThumb = null; }
   previewFrames.forEach(fr => URL.revokeObjectURL(fr.url)); previewFrames.length = 0;
@@ -1381,7 +1387,7 @@ async function loadFrameSetInto(zip, prefix, stateKey, frameSet) {
 async function loadSkinForEdit(entry) {
   if (!confirm(`현재 입력 내용을 버리고 '${entry.name || entry.skinId}'(${entry.skinId})을 불러옵니다.\n계속할까요?`)) return;
 
-  const status = document.getElementById("status");
+  const status = $("status");
   status.textContent = `'${entry.skinId}' 불러오는 중…`;
   try {
     // 1) 캐릭터 zip fetch + 해제
@@ -1396,16 +1402,16 @@ async function loadSkinForEdit(entry) {
     resetBuilderState();
 
     // 2) 메타데이터(catalog entry 우선, 없으면 skin.json)
-    document.getElementById("skinId").value = entry.skinId || skinJson.skinId || "";
-    document.getElementById("name").value = entry.name || skinJson.name || "";
-    document.getElementById("nameEn").value = entry.localized?.en?.name || skinJson.localized?.en?.name || "";
-    document.getElementById("price").value = Number(entry.price) || 0;
-    document.getElementById("prestige").checked = !!entry.prestige;
-    document.getElementById("hidden").checked = !!entry.hidden;
-    document.getElementById("saleEnd").value = entry.saleEnd || "";
-    document.getElementById("description").value = entry.description || skinJson.description || "";
-    document.getElementById("descriptionEn").value = entry.localized?.en?.description || skinJson.localized?.en?.description || "";
-    document.getElementById("createdAt").value = entry.createdAt || skinJson.createdAt || nowLocalDateTime();
+    $("skinId").value = entry.skinId || skinJson.skinId || "";
+    $("name").value = entry.name || skinJson.name || "";
+    $("nameEn").value = entry.localized?.en?.name || skinJson.localized?.en?.name || "";
+    $("price").value = Number(entry.price) || 0;
+    $("prestige").checked = !!entry.prestige;
+    $("hidden").checked = !!entry.hidden;
+    $("saleEnd").value = entry.saleEnd || "";
+    $("description").value = entry.description || skinJson.description || "";
+    $("descriptionEn").value = entry.localized?.en?.description || skinJson.localized?.en?.description || "";
+    $("createdAt").value = entry.createdAt || skinJson.createdAt || nowLocalDateTime();
     // 3) 캐릭터 프레임
     const ch = skinJson.character || {};
     await loadFrameSetInto(zip, prefix, "stop", ch.stop);
@@ -1416,8 +1422,8 @@ async function loadSkinForEdit(entry) {
     const itl = ch.running && ch.running.interlude;
     if (itl) {
       await loadFrameSetInto(zip, prefix, "interlude", itl);
-      document.getElementById("itlEveryMin").value = (itl.everyMinutes != null) ? itl.everyMinutes : "";
-      document.getElementById("itlDurSec").value = (itl.durationSec != null) ? itl.durationSec : "";
+      $("itlEveryMin").value = (itl.everyMinutes != null) ? itl.everyMinutes : "";
+      $("itlDurSec").value = (itl.durationSec != null) ? itl.durationSec : "";
     }
 
     // 4) 타이머 에셋(배경/버튼/폰트)
@@ -1434,15 +1440,15 @@ async function loadSkinForEdit(entry) {
         if (f) assets[b.key] = { slotId: b.key, file: f, url: URL.createObjectURL(f), outName: nm };
       }
     }
-    document.getElementById("buttonStyle").value = timer.buttonStyle || "default";
+    $("buttonStyle").value = timer.buttonStyle || "default";
     const font = timer.font || {};
     if (font.file) {
       const f = await fileFromZip(zip, prefix, font.file);
       if (f) assets.font = { slotId: "font", file: f, url: URL.createObjectURL(f), outName: font.file };
     }
-    document.getElementById("fontColor").value = font.color || "";
-    document.getElementById("fontSize").value = (font.sizeSp != null) ? font.sizeSp : "";
-    document.getElementById("fontFamily").value = font.family || "";
+    $("fontColor").value = font.color || "";
+    $("fontSize").value = (font.sizeSp != null) ? font.sizeSp : "";
+    $("fontFamily").value = font.family || "";
 
     // 5) 미리보기(thumb + prevNN)
     const thumb = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/thumb.png`, "thumb.png");
@@ -1482,7 +1488,7 @@ function markSkinDeleting(id) {
 
 // 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
 async function makeDeleteMarker(entry = null) {
-  const fallbackId = entry?.skinId || document.getElementById("skinId").value.trim();
+  const fallbackId = entry?.skinId || $("skinId").value.trim();
   const id = (entry?.skinId || prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):", fallbackId) || "").trim();
   if (!id) return;
   if (!/^[A-Za-z0-9_]+$/.test(id)) { alert("skinId 형식이 올바르지 않습니다(영문/숫자/_)."); return; }
@@ -1504,17 +1510,13 @@ async function makeDeleteMarker(entry = null) {
     const ok = await commitToInbox(`${id}.delete.json`, blob, `chore(skin): _inbox/${id}.delete.json (삭제 요청)`);
     if (ok) {
       markSkinDeleting(id);
-      document.getElementById("status").innerHTML =
+      $("status").innerHTML =
         `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다. (완료되면 ↻로 목록 갱신)`;
     }
     return;
   }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${id}.delete.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  document.getElementById("status").innerHTML =
+  downloadBlob(blob, `${id}.delete.json`);
+  $("status").innerHTML =
     `<b>${escapeHtml(id)}.delete.json</b> 저장됨 → <b>업로드</b>하면 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다.`;
   alert(`삭제 파일 '${id}.delete.json' 을 저장했습니다.\n📤 업로드 하면 자동으로 삭제됩니다.`);
 }
@@ -1528,9 +1530,9 @@ function escapeHtml(s) {
 }
 
 function updateDupHint() {
-  const el = document.getElementById("skinIdDup");
+  const el = $("skinIdDup");
   if (!el) return;
-  const id = document.getElementById("skinId").value.trim();
+  const id = $("skinId").value.trim();
   if (!id) { el.textContent = ""; return; }
   // 형식 먼저 검사 — 영문/숫자/_ 외(한글 등)면 바로 거부.
   if (!/^[A-Za-z0-9_]+$/.test(id)) {
@@ -1557,14 +1559,14 @@ function updateDupHint() {
 }
 
 function renderReleased() {
-  const ul = document.getElementById("relList");
-  const q = document.getElementById("relSearch").value.trim().toLowerCase();
+  const ul = $("relList");
+  const q = $("relSearch").value.trim().toLowerCase();
   const list = releasedSkins.filter(s =>
     !q ||
     (s.skinId || "").toLowerCase().includes(q) ||
     (s.name || "").toLowerCase().includes(q) ||
     (s.localized?.en?.name || "").toLowerCase().includes(q));
-  document.getElementById("relCount").textContent = `${list.length}/${releasedSkins.length}`;
+  $("relCount").textContent = `${list.length}/${releasedSkins.length}`;
   if (!list.length) {
     ul.innerHTML = `<li class="rel-empty">${releasedSkins.length ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
     return;
@@ -1605,9 +1607,9 @@ function renderReleased() {
 }
 
 async function loadReleased() {
-  const ul = document.getElementById("relList");
+  const ul = $("relList");
   ul.innerHTML = `<li class="rel-empty">불러오는 중…</li>`;
-  document.getElementById("relCount").textContent = "…";
+  $("relCount").textContent = "…";
   try {
     const res = await fetch(CATALOG_URL + "?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1615,21 +1617,21 @@ async function loadReleased() {
     releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
     releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
     renderReleased();
-    if (document.getElementById("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
+    if ($("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
     updateDupHint();
   } catch (e) {
     releasedSkins = [];
-    document.getElementById("relCount").textContent = "—";
+    $("relCount").textContent = "—";
     ul.innerHTML = `<li class="rel-empty">목록을 못 불러왔어요<br>(${escapeHtml(e.message)})<br>↻ 새로고침을 눌러보세요.</li>`;
   }
 }
 
 function setupReleasedPanel() {
   document.body.classList.add("panel-open");
-  document.getElementById("relSearch").addEventListener("input", renderReleased);
-  document.getElementById("relRefresh").addEventListener("click", loadReleased);
-  document.getElementById("relCollapse").addEventListener("click", () => document.body.classList.remove("panel-open"));
-  document.getElementById("relReopen").addEventListener("click", () => document.body.classList.add("panel-open"));
+  $("relSearch").addEventListener("input", renderReleased);
+  $("relRefresh").addEventListener("click", loadReleased);
+  $("relCollapse").addEventListener("click", () => document.body.classList.remove("panel-open"));
+  $("relReopen").addEventListener("click", () => document.body.classList.add("panel-open"));
   loadReleased();
 }
 
@@ -1641,7 +1643,7 @@ function randomLifetimePassCode() {
   crypto.getRandomValues(bytes);
   let raw = "";
   for (const b of bytes) raw += alphabet[b % alphabet.length];
-  const prefix = document.getElementById("giftTargetType")?.value === "skin" ? "GIFT" : "PASS";
+  const prefix = $("giftTargetType")?.value === "skin" ? "GIFT" : "PASS";
   return `${prefix}-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 }
 
@@ -1649,22 +1651,22 @@ let autoGeneratedGiftCodes = new Set();
 let pendingGiftRegistry = null;
 
 function selectedGiftSkin() {
-  const skinId = document.getElementById("giftTargetSkinId").value.trim().toLowerCase();
+  const skinId = $("giftTargetSkinId").value.trim().toLowerCase();
   return releasedSkins.find(s => String(s.skinId || "").toLowerCase() === skinId) || null;
 }
 
 function updateGiftControls() {
-  const targetType = document.getElementById("giftTargetType").value;
+  const targetType = $("giftTargetType").value;
   const skinTargetOn = targetType === "skin";
   const selected = skinTargetOn ? selectedGiftSkin() : null;
   const gated = skinTargetOn && !selected;
   const paidSkin = !!selected && Number(selected.price || 0) > 0;
-  const usage = document.getElementById("lifetimePassUsageLimit").value;
-  const count = document.getElementById("lifetimePassGenerateCount");
-  const codes = document.getElementById("lifetimePassCodes");
+  const usage = $("lifetimePassUsageLimit").value;
+  const count = $("lifetimePassGenerateCount");
+  const codes = $("lifetimePassCodes");
   ["giftLabel", "lifetimePassExpiresAt", "lifetimePassUsageLimit", "generateLifetimePassCodes",
    "makeLifetimePassMarker", "uploadLifetimePassMarker"].forEach(id => {
-    document.getElementById(id).disabled = gated;
+    $(id).disabled = gated;
   });
   count.disabled = gated || usage === "unlimited";
   if (usage === "unlimited") count.value = "1";
@@ -1678,16 +1680,16 @@ function updateGiftControls() {
 }
 
 function updateLifetimePassCodeHint() {
-  const hint = document.getElementById("lifetimePassCodeHint");
-  const targetType = document.getElementById("giftTargetType").value;
-  const skinId = document.getElementById("giftTargetSkinId").value.trim();
-  const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
-  const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
-  const usageLimit = document.getElementById("lifetimePassUsageLimit").value;
+  const hint = $("lifetimePassCodeHint");
+  const targetType = $("giftTargetType").value;
+  const skinId = $("giftTargetSkinId").value.trim();
+  const codes = parseGiftCodes($("lifetimePassCodes").value);
+  const expiresAt = $("lifetimePassExpiresAt").value.trim();
+  const usageLimit = $("lifetimePassUsageLimit").value;
   const usageText = usageLimit === "once" ? "1회 소진" : "제한 없음";
   const bad = codes.filter(c => !/^[A-Z0-9-]+$/.test(c));
   const skinTargetOn = targetType === "skin";
-  document.getElementById("giftTargetSkinField").style.display = skinTargetOn ? "" : "none";
+  $("giftTargetSkinField").style.display = skinTargetOn ? "" : "none";
   updateGiftControls();
   if (!codes.length) {
     hint.textContent = "코드를 입력하거나 자동 생성해 주세요.";
@@ -1701,7 +1703,7 @@ function updateLifetimePassCodeHint() {
   } else if (skinTargetOn && releasedSkins.length && !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase())) {
     hint.textContent = `'${skinId}'는 출시된 테마 목록에 없어요 — 목록에서 선택하세요.`;
     hint.style.color = "var(--danger)";
-  } else if (!document.getElementById("giftLabel").value.trim()) {
+  } else if (!$("giftLabel").value.trim()) {
     hint.textContent = "원장에 표시할 코드명/라벨을 입력해 주세요.";
     hint.style.color = "var(--sub)";
   } else {
@@ -1712,9 +1714,9 @@ function updateLifetimePassCodeHint() {
 }
 
 function generateLifetimePassCodes() {
-  const count = Math.min(100, Math.max(1, parseInt(document.getElementById("lifetimePassGenerateCount").value) || 1));
-  const usage = document.getElementById("lifetimePassUsageLimit").value;
-  const existing = usage === "unlimited" ? [] : parseGiftCodes(document.getElementById("lifetimePassCodes").value);
+  const count = Math.min(100, Math.max(1, parseInt($("lifetimePassGenerateCount").value) || 1));
+  const usage = $("lifetimePassUsageLimit").value;
+  const existing = usage === "unlimited" ? [] : parseGiftCodes($("lifetimePassCodes").value);
   const codes = existing.slice();
   const addCount = usage === "unlimited" ? 1 : count;
   try { while (codes.length < existing.length + addCount) {
@@ -1722,19 +1724,19 @@ function generateLifetimePassCodes() {
     if (!codes.includes(code)) codes.push(code);
   } } catch (e) { alert(e.message); return; }
   autoGeneratedGiftCodes = new Set([...autoGeneratedGiftCodes, ...codes]);
-  document.getElementById("lifetimePassCodes").value = codes.join("\n");
+  $("lifetimePassCodes").value = codes.join("\n");
   updateLifetimePassCodeHint();
 }
 
 // 검증 후 해금 코드 마커 {blob, filename} 생성. 문제가 있으면 alert 후 null.
 // JSON 다운로드(makeLifetimePassMarker)와 원클릭 업로드(uploadLifetimePassMarker) 공용.
 function buildLifetimePassMarker() {
-  const targetType = document.getElementById("giftTargetType").value;
-  const skinId = document.getElementById("giftTargetSkinId").value.trim();
-  const codes = parseGiftCodes(document.getElementById("lifetimePassCodes").value);
-  const expiresAt = document.getElementById("lifetimePassExpiresAt").value.trim();
-  const usageLimit = document.getElementById("lifetimePassUsageLimit").value;
-  const label = document.getElementById("giftLabel").value.trim();
+  const targetType = $("giftTargetType").value;
+  const skinId = $("giftTargetSkinId").value.trim();
+  const codes = parseGiftCodes($("lifetimePassCodes").value);
+  const expiresAt = $("lifetimePassExpiresAt").value.trim();
+  const usageLimit = $("lifetimePassUsageLimit").value;
+  const label = $("giftLabel").value.trim();
   const maxUses = usageLimit === "once" ? 1 : 0;
   const errors = [];
   if (!label) errors.push("코드명/라벨을 입력하세요.");
@@ -1780,6 +1782,8 @@ function buildLifetimePassMarker() {
     skin_id: targetType === "skin" ? skinId : null,
     usage_limit: maxUses, code_count: codes.length,
     expires_at: expiresAt || null, created_at: createdAt,
+    // 코드 원문은 보내지 않고 해시만 전송 — 배치 단위 무효화에 사용(빌더에는 코드가 다시 노출되지 않음).
+    hashes: codes.map(code => sha256(code)),
   };
   return { blob, filename, registry };
 }
@@ -1793,13 +1797,13 @@ async function registerGiftBatch(registry) {
   if (res.status === 401) { showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요."); return false; }
   if (!res.ok || !data.ok) throw new Error(data.error || `원장 등록 실패(${res.status})`);
   pendingGiftRegistry = null;
-  document.getElementById("retryGiftRegistry").hidden = true;
+  $("retryGiftRegistry").hidden = true;
   await loadGiftRegistry();
   return true;
 }
 
 async function loadGiftRegistry() {
-  const box = document.getElementById("giftRegistryList");
+  const box = $("giftRegistryList");
   if (!box || !INBOX_API_URL) return;
   try {
     const res = await fetch(`${INBOX_API_URL}/v1/registry`, { credentials: "include", cache: "no-store" });
@@ -1810,25 +1814,56 @@ async function loadGiftRegistry() {
       const target = e.target_type === "skin" ? `개별 테마 · ${escapeHtml(e.skin_id || "-")}` : "평생이용권";
       const created = Number.isFinite(Date.parse(e.created_at))
         ? new Date(e.created_at).toLocaleString("ko-KR") : escapeHtml(e.created_at || "-");
-      return `<article class="gift-issued-item">` +
+      const id = e.id ? String(e.id) : "";
+      const revoked = !!e.revoked_at;
+      const hasHashes = Number(e.hash_count) > 0;
+      // 무효화 버튼: 코드 해시가 저장돼 있고(=무효화 가능) 아직 무효화 전인 배치에만 노출.
+      const action = revoked
+        ? `<span class="gift-issued-revoked" title="무효화됨">무효됨</span>`
+        : (id && hasHashes
+            ? `<button type="button" class="gift-issued-del" data-revoke-registry="${escapeHtml(id)}" title="앞으로의 적용을 무효화">무효화</button>`
+            : "");
+      return `<article class="gift-issued-item${revoked ? " is-revoked" : ""}"${id ? ` data-registry-id="${escapeHtml(id)}"` : ""}>` +
+        `<div class="gift-issued-body">` +
         `<div class="gift-issued-title">${escapeHtml(e.label)}</div>` +
         `<div class="gift-issued-meta">${target}<br>` +
         `${Number(e.usage_limit) === 1 ? "1회 소진" : "무제한"} · ${Number(e.code_count)}개 · ` +
-        `만료 ${escapeHtml(e.expires_at || "없음")}<br>발급 ${created}</div></article>`;
+        `만료 ${escapeHtml(e.expires_at || "없음")}<br>발급 ${created}</div></div>` +
+        action + `</article>`;
     }).join("") : `<div class="hint">아직 발급한 코드가 없습니다.</div>`;
   } catch (e) { box.textContent = `원장 조회 실패: ${e.message}`; }
+}
+
+// 발급 배치 무효화 — 이 배치의 코드가 앞으로 적용되지 않도록 막는다.
+// 이미 코드를 입력해 해금을 받은 사용자에게는 영향이 없다(발급된 토큰은 그대로 유효).
+async function revokeGiftEntry(id, btn) {
+  if (!id || !INBOX_API_URL) return;
+  if (!confirm("이 배치의 코드를 무효화할까요?\n\n· 아직 사용하지 않은 코드는 앞으로 적용되지 않습니다.\n· 이미 적용한 사용자는 그대로 유지됩니다.\n· 되돌릴 수 없습니다.")) return;
+  const item = btn?.closest(".gift-issued-item");
+  if (item) item.classList.add("is-deleting");
+  if (btn) { btn.disabled = true; btn.textContent = "무효화 중…"; }
+  try {
+    const res = await fetch(`${INBOX_API_URL}/v1/registry/revoke`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }),
+    });
+    if (res.status === 401) { showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요."); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `무효화 실패(${res.status})`);
+    await loadGiftRegistry();
+  } catch (e) {
+    if (item) item.classList.remove("is-deleting");
+    if (btn) { btn.disabled = false; btn.textContent = "무효화"; }
+    alert("무효화 실패: " + e.message);
+  }
 }
 
 // JSON 만들기 — 파일로 다운로드(수동 업로드용, 기존 방식).
 function makeLifetimePassMarker() {
   const r = buildLifetimePassMarker();
   if (!r) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(r.blob);
-  a.download = r.filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  document.getElementById("status").innerHTML =
+  downloadBlob(r.blob, r.filename);
+  $("status").innerHTML =
     `<b>${escapeHtml(r.filename)}</b> 저장됨 → <b>📤 직접 업로드</b>로 _inbox에 올리면 해금 코드가 catalog에 병합됩니다.`;
 }
 
@@ -1837,7 +1872,7 @@ async function uploadLifetimePassMarker() {
   if (!inboxReady()) { alert("자동 업로드가 설정되지 않았습니다. 'JSON 만들기'로 받아 '📤 직접 업로드'를 사용하세요."); return; }
   const r = buildLifetimePassMarker();
   if (!r) return;
-  const btn = document.getElementById("uploadLifetimePassMarker");
+  const btn = $("uploadLifetimePassMarker");
   const orig = btn.textContent;
   btn.disabled = true; btn.textContent = "업로드 중…";
   try {
@@ -1846,11 +1881,11 @@ async function uploadLifetimePassMarker() {
       pendingGiftRegistry = r.registry;
       try {
         await registerGiftBatch(r.registry);
-        document.getElementById("status").innerHTML =
+        $("status").innerHTML =
           `✅ <b>${escapeHtml(r.filename)}</b> 업로드 및 원장 등록 완료 → 1~2분 뒤 catalog에 자동 반영됩니다.`;
       } catch (e) {
-        document.getElementById("retryGiftRegistry").hidden = false;
-        document.getElementById("status").innerHTML =
+        $("retryGiftRegistry").hidden = false;
+        $("status").innerHTML =
           `⚠️ 코드는 업로드됐지만 원장 등록에 실패했습니다: ${escapeHtml(e.message)}`;
       }
     }
@@ -1867,7 +1902,7 @@ async function uploadLifetimePassMarker() {
 let giftComboActive = -1; // 키보드 하이라이트 인덱스
 
 function giftComboMatches() {
-  const q = document.getElementById("giftTargetSkinId").value.trim().toLowerCase();
+  const q = $("giftTargetSkinId").value.trim().toLowerCase();
   return releasedSkins.filter(s =>
     !q ||
     (s.skinId || "").toLowerCase().includes(q) ||
@@ -1876,7 +1911,7 @@ function giftComboMatches() {
 }
 
 function renderGiftCombo() {
-  const ul = document.getElementById("giftSkinComboList");
+  const ul = $("giftSkinComboList");
   if (!ul) return;
   const list = giftComboMatches();
   if (giftComboActive >= list.length) giftComboActive = -1;
@@ -1908,23 +1943,23 @@ function renderGiftCombo() {
 }
 
 function openGiftCombo() {
-  const combo = document.getElementById("giftSkinCombo");
+  const combo = $("giftSkinCombo");
   if (!combo) return;
   renderGiftCombo();
   combo.classList.add("open");
-  document.getElementById("giftTargetSkinId").setAttribute("aria-expanded", "true");
+  $("giftTargetSkinId").setAttribute("aria-expanded", "true");
 }
 
 function closeGiftCombo() {
-  const combo = document.getElementById("giftSkinCombo");
+  const combo = $("giftSkinCombo");
   if (!combo) return;
   combo.classList.remove("open");
-  document.getElementById("giftTargetSkinId").setAttribute("aria-expanded", "false");
+  $("giftTargetSkinId").setAttribute("aria-expanded", "false");
   giftComboActive = -1;
 }
 
 function selectGiftSkin(id) {
-  const input = document.getElementById("giftTargetSkinId");
+  const input = $("giftTargetSkinId");
   input.value = id;
   closeGiftCombo();
   updateLifetimePassCodeHint();
@@ -1932,8 +1967,8 @@ function selectGiftSkin(id) {
 }
 
 function setupGiftSkinCombo() {
-  const input = document.getElementById("giftTargetSkinId");
-  const combo = document.getElementById("giftSkinCombo");
+  const input = $("giftTargetSkinId");
+  const combo = $("giftSkinCombo");
   if (!input || !combo) return;
   input.addEventListener("focus", openGiftCombo);
   input.addEventListener("input", () => { giftComboActive = -1; openGiftCombo(); });
@@ -1962,8 +1997,8 @@ function setupGiftSkinCombo() {
 
 function setupOpsPanel() {
   document.body.classList.add("ops-open");
-  document.getElementById("opsCollapse").addEventListener("click", () => document.body.classList.remove("ops-open"));
-  document.getElementById("opsReopen").addEventListener("click", () => document.body.classList.add("ops-open"));
+  $("opsCollapse").addEventListener("click", () => document.body.classList.remove("ops-open"));
+  $("opsReopen").addEventListener("click", () => document.body.classList.add("ops-open"));
 }
 
 /* ---------- init ---------- */
@@ -1983,35 +2018,40 @@ function nowLocalDateTime() {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
 }
 // 출시일시는 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
-document.getElementById("createdAt").value = nowLocalDateTime();
+$("createdAt").value = nowLocalDateTime();
 
 ["skinId", "name", "nameEn", "price", "prestige", "hidden", "saleEnd", "description", "descriptionEn", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
-  const el = document.getElementById(id);
+  const el = $(id);
   el.addEventListener("input", refresh);
   el.addEventListener("change", refresh);
 });
 ["giftTargetType", "giftTargetSkinId", "giftLabel", "lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount", "lifetimePassUsageLimit"].forEach(id => {
-  const el = document.getElementById(id);
+  const el = $(id);
   el.addEventListener("input", updateLifetimePassCodeHint);
   el.addEventListener("change", updateLifetimePassCodeHint);
 });
-document.getElementById("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
-document.getElementById("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
-document.getElementById("uploadLifetimePassMarker").addEventListener("click", uploadLifetimePassMarker);
-document.getElementById("retryGiftRegistry").addEventListener("click", async () => {
+$("generateLifetimePassCodes").addEventListener("click", generateLifetimePassCodes);
+$("makeLifetimePassMarker").addEventListener("click", makeLifetimePassMarker);
+$("uploadLifetimePassMarker").addEventListener("click", uploadLifetimePassMarker);
+$("retryGiftRegistry").addEventListener("click", async () => {
   if (!pendingGiftRegistry) return;
-  try { await registerGiftBatch(pendingGiftRegistry); document.getElementById("status").textContent = "✅ 원장 등록을 완료했습니다."; }
+  try { await registerGiftBatch(pendingGiftRegistry); $("status").textContent = "✅ 원장 등록을 완료했습니다."; }
   catch (e) { alert(e.message); }
 });
-document.getElementById("refreshGiftRegistry").addEventListener("click", loadGiftRegistry);
-document.getElementById("makeBtn").addEventListener("click", makeZip);
-document.getElementById("autoUploadBtn").addEventListener("click", autoUpload);
-document.getElementById("loginForm").addEventListener("submit", submitLogin);
-document.getElementById("logoutBtn").addEventListener("click", logout);
+$("refreshGiftRegistry").addEventListener("click", loadGiftRegistry);
+$("giftRegistryList").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-revoke-registry]");
+  if (!btn) return;
+  revokeGiftEntry(btn.getAttribute("data-revoke-registry"), btn);
+});
+$("makeBtn").addEventListener("click", makeZip);
+$("autoUploadBtn").addEventListener("click", autoUpload);
+$("loginForm").addEventListener("submit", submitLogin);
+$("logoutBtn").addEventListener("click", logout);
 // 자동 업로드(Worker)가 설정 안 됐으면 원클릭 업로드 버튼들은 숨긴다(직접 업로드만 사용).
 if (!inboxReady()) {
   ["autoUploadBtn", "uploadLifetimePassMarker"].forEach(id => {
-    const el = document.getElementById(id);
+    const el = $(id);
     if (el) el.style.display = "none";
   });
 }
