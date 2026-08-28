@@ -209,13 +209,19 @@
   body:not(.ops-open) #opsPanel { display: none; }
   body:not(.ops-open) #opsReopen { display: block; }
 
-  /* 코드목록 패널 — 코드발급(opsPanel) 바로 오른쪽. 코드발급과 함께 열리고 닫힌다. */
+  /* 코드목록 패널 — 코드발급(opsPanel) 바로 오른쪽. 코드발급과 독립적으로 열고 닫는다. */
   #codeListPanel {
     position: fixed; top: calc(var(--header-h) + 12px); left: calc(40px + 300px + 16px); bottom: 76px; width: 300px;
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
     display: flex; flex-direction: column; z-index: 6; box-shadow: 0 4px 16px rgba(0,0,0,.07);
   }
-  body:not(.ops-open) #codeListPanel { display: none; }
+  #codeListReopen {
+    position: fixed; top: calc(var(--header-h) + 6px); left: calc(40px + 300px + 16px); z-index: 6; display: none;
+    border: 1px solid var(--accent); background: #fff; color: var(--accent);
+    border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  body:not(.codelist-open) #codeListPanel { display: none; }
+  body:not(.codelist-open) #codeListReopen { display: block; }
 
   /* 출시 스킨 조회 패널 */
   /* 패널이 열려도 입력 컬럼은 '화면 중앙'을 기본으로 둔다.
@@ -225,10 +231,11 @@
     margin-left: max(16px, min(calc((100vw - 760px) / 2), calc(100vw - 1132px)));
     margin-right: auto;
   }
-  /* 넓은 화면: 코드발급·코드목록(왼쪽 두 패널)이 열리면 본문을 그 오른쪽으로 밀어 가림을 막는다. */
+  /* 넓은 화면: 코드목록(오른쪽 끝이 본문 영역까지 오는 왼쪽 두 번째 패널)이 열리면
+     본문을 그 오른쪽으로 밀어 가림을 막는다. 코드발급만 열렸을 때는 기존처럼 살짝 겹친다. */
   @media (min-width: 1181px) {
-    body.ops-open main { margin-left: calc(40px + 300px + 16px + 300px + 24px); }
-    body.ops-open.panel-open main { margin-right: calc(300px + 40px + 24px); max-width: none; }
+    body.codelist-open main { margin-left: calc(40px + 300px + 16px + 300px + 24px); }
+    body.codelist-open.panel-open main { margin-right: calc(300px + 40px + 24px); max-width: none; }
   }
   #releasedPanel {
     position: fixed; top: calc(var(--header-h) + 12px); right: 40px; bottom: 76px; width: 300px;
@@ -524,11 +531,13 @@
     <b id="giftRegistryTitle">코드목록</b>
     <span class="sp"></span>
     <button class="pick pick-sm" id="refreshGiftRegistry" type="button">새로고침</button>
+    <button id="codeListCollapse" type="button" title="코드목록 접기">×</button>
   </div>
   <div class="ops-body">
     <div id="giftRegistryList" class="gift-issued-list" aria-live="polite">목록을 불러오는 중입니다.</div>
   </div>
 </aside>
+<button id="codeListReopen" type="button" title="코드목록 열기">코드목록</button>
 
 <aside id="releasedPanel">
   <div class="rel-head">
@@ -2018,6 +2027,10 @@ function setupOpsPanel() {
   document.body.classList.add("ops-open");
   $("opsCollapse").addEventListener("click", () => document.body.classList.remove("ops-open"));
   $("opsReopen").addEventListener("click", () => document.body.classList.add("ops-open"));
+  // 코드목록 패널은 코드발급과 독립적으로 열고 닫는다.
+  document.body.classList.add("codelist-open");
+  $("codeListCollapse").addEventListener("click", () => document.body.classList.remove("codelist-open"));
+  $("codeListReopen").addEventListener("click", () => document.body.classList.add("codelist-open"));
 }
 
 /* ---------- init ---------- */
