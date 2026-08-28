@@ -91,6 +91,14 @@
       "prestige": false,
       "createdAt": "2026-08-27T21:50:23",
       "version": 1
+    },
+    {
+      "skinId": "16",
+      "name": "런닝머신 홉빵이",
+      "price": 0,
+      "prestige": false,
+      "createdAt": "2026-08-28T09:08:27",
+      "version": 1
     }
   ]
 }
