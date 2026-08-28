@@ -1257,12 +1257,22 @@ async function buildBundleBlob() {
     prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
   }
 
-  // 2-1) 행동별 움짤(GIF): 보유 무관 미리보기 애니메이션용. 프레임 2장 이상인 행동만 생성.
-  //      motion_{stop,running,pause,complete}.gif — 앱이 이 이름으로 탐침해 재생.
-  for (const s of STATES) {
-    const gif = await buildMotionGifBlob(s.key);
-    if (gif) prevDir.file(`motion_${s.key}.gif`, gif);
+  // 2-1) 행동별 미리보기(보유 무관): 프레임 2장 이상이면 움짤(GIF), 1장이면 정지 PNG로 내보낸다.
+  //      motion_{stop,running,pause,complete,interlude}.{gif,png} — 앱이 이 이름으로 탐침해 재생/표시.
+  async function addMotionAsset(stateKey) {
+    const st = store[stateKey];
+    if (!st || st.frames.length === 0) return;
+    if (st.frames.length === 1) {
+      // 1프레임은 움짤이 무의미 → 그 PNG 그대로 미리보기로.
+      prevDir.file(`motion_${stateKey}.png`, await toPngBlob(st.frames[0].file));
+    } else {
+      const gif = await buildMotionGifBlob(stateKey);
+      if (gif) prevDir.file(`motion_${stateKey}.gif`, gif);
+    }
   }
+  for (const s of STATES) await addMotionAsset(s.key);
+  // 특수 모션(인터루드)이 실제로 skin.json에 포함됐을 때만 미리보기로 추가.
+  if (json.character?.running?.interlude) await addMotionAsset("interlude");
 
   // 3) catalog 병합용 항목
   bundle.file("catalog_entry.json", JSON.stringify(buildCatalogEntry(), null, 2));
@@ -1585,13 +1595,13 @@ function productIdOfEntry(entry, skinId) {
   return entry?.productId || `skin_${String(skinId || entry?.skinId || "").toLowerCase()}`;
 }
 
-// 삭제 요청을 올린 항목을 목록에서 회색·클릭 불가로 잠근다(Action이 처리 후 catalog에서 사라짐).
-function markSkinDeleting(id) {
-  const li = document.querySelector(`#relList li[data-skin-id="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`);
-  if (!li) return;
-  li.classList.add("rel-deleting");
-  const del = li.querySelector(".rel-delete");
-  if (del) { del.textContent = "삭제 중…"; del.disabled = true; }
+// 삭제 요청을 올린 skinId 집합. 새로고침/페이지 재로딩 후에도 목록에서 회색·클릭불가가 유지되도록
+// localStorage에 보존한다(Action이 catalog에서 실제로 지우면 loadReleased가 자동으로 정리).
+const PENDING_DELETE_KEY = "skinPendingDelete";
+let pendingDeleteIds = new Set();
+try { const raw = localStorage.getItem(PENDING_DELETE_KEY); if (raw) pendingDeleteIds = new Set(JSON.parse(raw)); } catch {}
+function savePendingDelete() {
+  try { localStorage.setItem(PENDING_DELETE_KEY, JSON.stringify([...pendingDeleteIds])); } catch {}
 }
 
 // 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
@@ -1600,6 +1610,11 @@ async function makeDeleteMarker(entry = null) {
   const id = (entry?.skinId || prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):", fallbackId) || "").trim();
   if (!id) return;
   if (!/^[A-Za-z0-9_]+$/.test(id)) { alert("skinId 형식이 올바르지 않습니다(영문/숫자/_)."); return; }
+  // 이미 삭제 요청이 접수돼 처리 대기 중이면 중복 업로드를 막는다(회색 잠금 상태).
+  if (pendingDeleteIds.has(id)) {
+    alert(`'${id}'는 이미 삭제 요청이 접수되어 처리 중입니다.\n1~2분 뒤 ↻로 목록을 갱신하면 사라집니다.`);
+    return;
+  }
   const catalogEntry = entry || releasedSkins.find(s => (s.skinId || "").toLowerCase() === id.toLowerCase()) || null;
   const price = Math.max(0, Number(catalogEntry?.price) || 0);
   const paid = price > 0;
@@ -1617,7 +1632,7 @@ async function makeDeleteMarker(entry = null) {
   if (inboxReady()) {
     const ok = await commitToInbox(`${id}.delete.json`, blob, `chore(skin): _inbox/${id}.delete.json (삭제 요청)`);
     if (ok) {
-      markSkinDeleting(id);
+      pendingDeleteIds.add(id); savePendingDelete(); renderReleased();
       $("status").innerHTML =
         `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다. (완료되면 ↻로 목록 갱신)`;
     }
@@ -1709,6 +1724,12 @@ function renderReleased() {
       makeDeleteMarker(s);
     };
     li.appendChild(deleteBtn);
+    // 삭제 요청이 접수된 항목은 Action 처리(카탈로그 제거)까지 회색·클릭불가로 잠근다.
+    if (pendingDeleteIds.has(s.skinId)) {
+      li.classList.add("rel-deleting");
+      deleteBtn.textContent = "삭제 중…";
+      deleteBtn.disabled = true;
+    }
     li.onclick = () => loadSkinForEdit(s);
     ul.appendChild(li);
   });
@@ -1724,6 +1745,13 @@ async function loadReleased() {
     const data = await res.json();
     releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
     releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
+    // 삭제가 완료돼 카탈로그에서 사라진 항목은 pending에서 정리 → 회색 잠금 자동 해제(그때만 다시 삭제 가능).
+    if (pendingDeleteIds.size) {
+      const alive = new Set(releasedSkins.map(s => s.skinId));
+      let changed = false;
+      for (const pid of [...pendingDeleteIds]) if (!alive.has(pid)) { pendingDeleteIds.delete(pid); changed = true; }
+      if (changed) savePendingDelete();
+    }
     renderReleased();
     if ($("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
     updateDupHint();
