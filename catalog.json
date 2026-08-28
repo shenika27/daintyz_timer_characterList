@@ -3,85 +3,11 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
-      "skinId": "cha07",
-      "name": "cha07",
-      "price": 0,
-      "prestige": false,
-      "description": "cha07",
-      "localized": {
-        "en": {
-          "name": "cha07",
-          "description": "cha07"
-        }
-      },
-      "createdAt": "2026-08-26T21:30:11",
-      "version": 2
-    },
-    {
-      "skinId": "cha08",
-      "name": "cha08",
-      "price": 0,
-      "prestige": false,
-      "localized": {
-        "en": {
-          "name": "cha08"
-        }
-      },
-      "createdAt": "2026-08-26T21:30:11",
-      "version": 1
-    },
-    {
       "skinId": "cha09",
       "name": "cha09",
       "price": 0,
       "prestige": false,
       "createdAt": "2026-08-26T21:40:45",
-      "version": 1
-    },
-    {
-      "skinId": "cha11",
-      "name": "테마이름(한글)",
-      "price": 0,
-      "prestige": false,
-      "description": "부제(한글,선택)",
-      "localized": {
-        "en": {
-          "name": "테마이름(영어)",
-          "description": "부제(영어,선택)"
-        }
-      },
-      "createdAt": "2026-08-27T09:45:18",
-      "version": 1
-    },
-    {
-      "skinId": "cha12",
-      "name": "cha12",
-      "price": 0,
-      "prestige": false,
-      "description": "부제(한글,선택)",
-      "localized": {
-        "en": {
-          "name": "테마이름(영어)",
-          "description": "부제(영어,선택)"
-        }
-      },
-      "createdAt": "2026-08-27T09:45:18",
-      "version": 1
-    },
-    {
-      "skinId": "cha13",
-      "name": "cha13",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-08-27T15:21:18",
-      "version": 1
-    },
-    {
-      "skinId": "cha14",
-      "name": "14",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-08-27T15:21:18",
       "version": 1
     },
     {
