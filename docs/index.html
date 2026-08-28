@@ -10,6 +10,7 @@
     --bg: #f4f5f7; --card: #ffffff; --line: #e3e6ea; --ink: #1d2329;
     --sub: #6b7480; --accent: #5b7cfa; --accent-d: #4763d6; --danger: #e2574c;
     --ok: #2faa6a; --chip: #eef1f6;
+    --header-h: 108px; /* 헤더 실제 높이로 JS가 갱신(폭에 따라 부제가 줄바꿈되어 달라짐). 패널 상단 겹침 방지. */
   }
   * { box-sizing: border-box; }
   body {
@@ -188,7 +189,7 @@
   code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
   #opsPanel {
-    position: fixed; top: 78px; left: 40px; bottom: 76px; width: 300px;
+    position: fixed; top: calc(var(--header-h) + 12px); left: 40px; bottom: 76px; width: 300px;
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
     display: flex; flex-direction: column; z-index: 6; box-shadow: 0 4px 16px rgba(0,0,0,.07);
   }
@@ -201,12 +202,20 @@
   .ops-body h3 { margin: 0 0 4px; font-size: 14px; }
   .ops-body .hint { margin: 0 0 12px; font-size: 12.5px; color: var(--sub); }
   #opsReopen {
-    position: fixed; top: 84px; left: 40px; z-index: 6; display: none;
+    position: fixed; top: calc(var(--header-h) + 6px); left: 40px; z-index: 6; display: none;
     border: 1px solid var(--accent); background: #fff; color: var(--accent);
     border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
   }
   body:not(.ops-open) #opsPanel { display: none; }
   body:not(.ops-open) #opsReopen { display: block; }
+
+  /* 코드목록 패널 — 코드발급(opsPanel) 바로 오른쪽. 코드발급과 함께 열리고 닫힌다. */
+  #codeListPanel {
+    position: fixed; top: calc(var(--header-h) + 12px); left: calc(40px + 300px + 16px); bottom: 76px; width: 300px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-direction: column; z-index: 6; box-shadow: 0 4px 16px rgba(0,0,0,.07);
+  }
+  body:not(.ops-open) #codeListPanel { display: none; }
 
   /* 출시 스킨 조회 패널 */
   /* 패널이 열려도 입력 컬럼은 '화면 중앙'을 기본으로 둔다.
@@ -216,8 +225,13 @@
     margin-left: max(16px, min(calc((100vw - 760px) / 2), calc(100vw - 1132px)));
     margin-right: auto;
   }
+  /* 넓은 화면: 코드발급·코드목록(왼쪽 두 패널)이 열리면 본문을 그 오른쪽으로 밀어 가림을 막는다. */
+  @media (min-width: 1181px) {
+    body.ops-open main { margin-left: calc(40px + 300px + 16px + 300px + 24px); }
+    body.ops-open.panel-open main { margin-right: calc(300px + 40px + 24px); max-width: none; }
+  }
   #releasedPanel {
-    position: fixed; top: 78px; right: 40px; bottom: 76px; width: 300px;
+    position: fixed; top: calc(var(--header-h) + 12px); right: 40px; bottom: 76px; width: 300px;
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
     display: flex; flex-direction: column; z-index: 6; box-shadow: 0 4px 16px rgba(0,0,0,.07);
   }
@@ -260,7 +274,7 @@
   .combo-item .ci-name { font-size: 11.5px; color: var(--sub); margin-top: 1px; }
   .combo-empty { padding: 10px 9px; font-size: 12px; color: var(--sub); text-align: center; }
   #relReopen {
-    position: fixed; top: 84px; right: 40px; z-index: 6; display: none;
+    position: fixed; top: calc(var(--header-h) + 6px); right: 40px; z-index: 6; display: none;
     border: 1px solid var(--accent); background: #fff; color: var(--accent);
     border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
   }
@@ -272,6 +286,7 @@
   }
   @media (max-width: 760px) {
     #opsPanel { display: none; }
+    #codeListPanel { display: none; }
     #releasedPanel { display: none; }
   }
 </style>
@@ -455,9 +470,9 @@
 
 <aside id="opsPanel">
   <div class="ops-head">
-    <b>운영 도구</b>
+    <b>코드발급</b>
     <span class="sp"></span>
-    <button id="opsCollapse" type="button" title="운영 도구 접기">×</button>
+    <button id="opsCollapse" type="button" title="코드발급 접기">×</button>
   </div>
   <div class="ops-body">
     <h3>기프트/해금 코드</h3>
@@ -500,16 +515,20 @@
       <button class="pick" id="uploadLifetimePassMarker" type="button">코드 업로드</button>
       <button class="pick" id="retryGiftRegistry" type="button" hidden>원장 등록 재시도</button>
     </div>
-    <section class="gift-issued" id="giftRegistryPanel" aria-labelledby="giftRegistryTitle">
-      <div class="gift-issued-head">
-        <h4 id="giftRegistryTitle">발급한 코드 목록</h4>
-        <button class="pick pick-sm" id="refreshGiftRegistry" type="button">새로고침</button>
-      </div>
-      <div id="giftRegistryList" class="gift-issued-list" aria-live="polite">목록을 불러오는 중입니다.</div>
-    </section>
   </div>
 </aside>
-<button id="opsReopen" type="button" title="운영 도구 열기">운영도구</button>
+<button id="opsReopen" type="button" title="코드발급 열기">코드발급</button>
+
+<aside id="codeListPanel">
+  <div class="ops-head">
+    <b id="giftRegistryTitle">코드목록</b>
+    <span class="sp"></span>
+    <button class="pick pick-sm" id="refreshGiftRegistry" type="button">새로고침</button>
+  </div>
+  <div class="ops-body">
+    <div id="giftRegistryList" class="gift-issued-list" aria-live="polite">목록을 불러오는 중입니다.</div>
+  </div>
+</aside>
 
 <aside id="releasedPanel">
   <div class="rel-head">
@@ -2002,6 +2021,20 @@ function setupOpsPanel() {
 }
 
 /* ---------- init ---------- */
+// 헤더 높이를 CSS 변수(--header-h)에 반영 — 좌/우 고정 패널이 헤더에 가려 상단이 잘리는 것을 막는다.
+// 부제가 폭에 따라 줄바꿈되어 헤더 높이가 달라지므로 리사이즈에도 갱신한다.
+(function syncHeaderHeight() {
+  const header = document.querySelector("header");
+  if (!header) return;
+  const apply = () => {
+    const h = Math.ceil(header.getBoundingClientRect().height);
+    if (h > 0) document.documentElement.style.setProperty("--header-h", `${h}px`); // 0이면 CSS 기본값(108px) 유지
+  };
+  apply();
+  if (window.ResizeObserver) new ResizeObserver(apply).observe(header);
+  window.addEventListener("resize", apply);
+})();
+
 buildStateCards();
 buildInterludeCard();
 buildAssetSlot("background", "타이머 배경", "image/*");
