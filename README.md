@@ -14,6 +14,15 @@
 
 ---
 
+## 🗒 TODO (나중에 정리 — 지금 당장은 아님)
+
+- [ ] **빌더의 prevNN 미리보기 갤러리 업로드 제거 검토.**
+  앱 미리보기는 이제 행동별 파일(`character/preview/{id}/motion_{state}.{gif,png}`)과 대표 썸네일(`thumb.png`)만 표시하고, **`prevNN.png`는 앱에서 더 이상 읽지 않습니다.**
+  그런데 스킨빌더(`docs/index.html`)의 "미리보기 갤러리(prev01, prev02…)" 칸은 아직 살아 있어, 거기에 올리면 `buildBundleBlob`이 `character/preview/{id}/prevNN.png`를 CDN에 계속 업로드합니다(앱엔 안 보이는 **잉여 파일**).
+  → 빌더 UI의 해당 칸 + `buildBundleBlob`의 `prev${NN}.png` 생성 코드를 제거하면 CDN이 깔끔해짐. (현재는 무해)
+
+---
+
 ## 리포 구조
 
 ```
