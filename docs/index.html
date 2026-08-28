@@ -308,6 +308,9 @@
     <input type="text" id="loginUsername" autocomplete="username" maxlength="64" required>
     <label for="loginPassword">비밀번호</label>
     <input type="password" id="loginPassword" autocomplete="current-password" maxlength="1024" required>
+    <label class="login-check" for="loginSaveId">
+      <input type="checkbox" id="loginSaveId"> 아이디 저장
+    </label>
     <label class="login-check" for="loginRemember">
       <input type="checkbox" id="loginRemember"> 자동로그인 (30일)
     </label>
@@ -1251,12 +1254,18 @@ const INBOX_API_URL = "https://daintyz-skin-inbox.xornexon.workers.dev"; // _inb
 
 function inboxReady() { return !!INBOX_API_URL; }
 
+const SAVED_ID_KEY = "skinBuilderSavedId";
 function showLogin(message = "") {
   document.body.classList.add("auth-pending");
   $("loginGate").hidden = false;
   $("loginError").textContent = message;
   $("loginPassword").value = "";
-  setTimeout(() => $("loginUsername").focus(), 0);
+  // 저장된 아이디가 있으면 채워두고, 커서는 비밀번호 칸으로 보낸다.
+  let savedId = "";
+  try { savedId = localStorage.getItem(SAVED_ID_KEY) || ""; } catch {}
+  $("loginUsername").value = savedId;
+  $("loginSaveId").checked = !!savedId;
+  setTimeout(() => $(savedId ? "loginPassword" : "loginUsername").focus(), 0);
 }
 function showBuilder(username) {
   $("authUsername").textContent = `${username}님`;
@@ -1283,11 +1292,12 @@ async function submitLogin(event) {
   const button = $("loginBtn");
   const error = $("loginError");
   button.disabled = true; button.textContent = "확인 중…"; error.textContent = "";
+  const username = $("loginUsername").value.trim();
   try {
     const res = await fetch(`${INBOX_API_URL}/auth/login`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: $("loginUsername").value.trim(),
+        username,
         password: $("loginPassword").value,
         rememberMe: $("loginRemember").checked,
       }),
@@ -1295,6 +1305,11 @@ async function submitLogin(event) {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || "로그인에 실패했습니다.");
+    // 아이디 저장 체크 시 다음 로그인 화면에서 자동으로 채운다.
+    try {
+      if ($("loginSaveId").checked) localStorage.setItem(SAVED_ID_KEY, username);
+      else localStorage.removeItem(SAVED_ID_KEY);
+    } catch {}
     $("loginPassword").value = "";
     showBuilder(data.username);
   } catch (e) {
@@ -2027,8 +2042,7 @@ function setupOpsPanel() {
   document.body.classList.add("ops-open");
   $("opsCollapse").addEventListener("click", () => document.body.classList.remove("ops-open"));
   $("opsReopen").addEventListener("click", () => document.body.classList.add("ops-open"));
-  // 코드목록 패널은 코드발급과 독립적으로 열고 닫는다.
-  document.body.classList.add("codelist-open");
+  // 코드목록 패널은 코드발급과 독립적으로 열고 닫는다. 최초 진입 시에는 닫힌 상태로 시작한다.
   $("codeListCollapse").addEventListener("click", () => document.body.classList.remove("codelist-open"));
   $("codeListReopen").addEventListener("click", () => document.body.classList.add("codelist-open"));
 }
