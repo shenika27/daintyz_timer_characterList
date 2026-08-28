@@ -30,6 +30,16 @@ const RETIRED = path.join(ROOT, "_retired_ids.json");
 
 function log(msg) { console.log(`[apply-skin-bundle] ${msg}`); }
 
+/** _inbox 마커 파일을 읽어 JSON 파싱. 실패하면 로그만 남기고 null(호출부는 건너뜀). */
+function readJsonMarker(marker) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(INBOX, marker), "utf8"));
+  } catch {
+    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
+    return null;
+  }
+}
+
 /** YYYY-MM-DD (UTC) — 은퇴 기록 날짜. */
 function today() { return new Date().toISOString().slice(0, 10); }
 
@@ -207,16 +217,9 @@ for (const zip of zips) {
 let deleted = 0;
 const markers = fs.readdirSync(INBOX).filter(f => f.toLowerCase().endsWith(".delete.json"));
 for (const marker of markers) {
-  const markerPath = path.join(INBOX, marker);
-  let markerData;
-  let skinId;
-  try {
-    markerData = JSON.parse(fs.readFileSync(markerPath, "utf8"));
-    skinId = String(markerData.deleteSkinId || "").trim();
-  } catch {
-    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
-    continue;
-  }
+  const markerData = readJsonMarker(marker);
+  if (!markerData) continue;
+  const skinId = String(markerData.deleteSkinId || "").trim();
   if (!skinId || !/^[A-Za-z0-9_]+$/.test(skinId)) {
     log(`⚠ ${marker}: deleteSkinId 누락/형식오류 — 건너뜀`);
     continue;
@@ -251,21 +254,15 @@ for (const marker of markers) {
   const rIdx = retiredIndexOf(skinId);
   if (rIdx >= 0) retiredLedger.retired[rIdx] = record; else retiredLedger.retired.push(record);
 
-  fs.rmSync(markerPath, { force: true });
+  fs.rmSync(path.join(INBOX, marker), { force: true });
   deleted++;
 }
 
 // 평생이용권 코드 마커(_inbox/*.lifetime-pass-codes.json) 처리: catalog 최상위 lifetimePassGiftCodes에 병합.
 let passCodesApplied = 0;
 for (const marker of passCodeMarkers) {
-  const markerPath = path.join(INBOX, marker);
-  let markerData;
-  try {
-    markerData = JSON.parse(fs.readFileSync(markerPath, "utf8"));
-  } catch {
-    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
-    continue;
-  }
+  const markerData = readJsonMarker(marker);
+  if (!markerData) continue;
   const codes = Array.isArray(markerData.lifetimePassGiftCodes)
     ? markerData.lifetimePassGiftCodes
     : [];
@@ -287,7 +284,7 @@ for (const marker of passCodeMarkers) {
     else catalog.lifetimePassGiftCodes.push(next);
     passCodesApplied++;
   }
-  fs.rmSync(markerPath, { force: true });
+  fs.rmSync(path.join(INBOX, marker), { force: true });
 }
 if (passCodesApplied > 0) {
   catalog.lifetimePassGiftCodes.sort((a, b) =>
@@ -300,14 +297,8 @@ if (passCodesApplied > 0) {
 // 개별 테마 코드 마커(_inbox/*.skin-gift-codes.json) 처리: catalog.skins[].giftCodes에 병합.
 let skinCodesApplied = 0;
 for (const marker of skinCodeMarkers) {
-  const markerPath = path.join(INBOX, marker);
-  let markerData;
-  try {
-    markerData = JSON.parse(fs.readFileSync(markerPath, "utf8"));
-  } catch {
-    log(`⚠ ${marker}: JSON 파싱 실패 — 건너뜀`);
-    continue;
-  }
+  const markerData = readJsonMarker(marker);
+  if (!markerData) continue;
   const codes = Array.isArray(markerData.skinGiftCodes)
     ? markerData.skinGiftCodes
     : [];
@@ -340,7 +331,7 @@ for (const marker of skinCodeMarkers) {
     entry.giftCodes = giftCodes.sort((a, b) => String(a.hash || "").localeCompare(String(b.hash || "")));
     skinCodesApplied++;
   }
-  fs.rmSync(markerPath, { force: true });
+  fs.rmSync(path.join(INBOX, marker), { force: true });
 }
 if (skinCodesApplied > 0) {
   log(`  → 개별 테마 코드 ${skinCodesApplied}개 병합`);
