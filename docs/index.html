@@ -999,6 +999,64 @@ function toPngBlob(file) {
   });
 }
 
+/* ---------- 행동별 움짤(GIF) 생성 ----------
+   보유(다운로드) 여부와 무관하게 미리보기에서 애니메이션을 보여주기 위해, 행동별 프레임을
+   업로드 시점에 GIF로 합성해 character/preview/{id}/motion_{state}.gif 로 번들에 넣는다.
+   앱은 CDN의 이 GIF를 Coil로 재생하므로 zip(프레임 낱장) 없이도 애니메이션이 나온다. */
+
+// GIF 투명 스프라이트의 1비트 투명 계단현상을 피하려 흰색으로 매트(=앱 상세 미리보기 배경색 #FFFFFF와 일치).
+const MOTION_MATTE = "#ffffff";
+
+// gifenc(경량 GIF 인코더) 지연 로드. JSZip처럼 CDN 의존(빌더는 온라인 전제).
+let _gifencMod = null;
+async function loadGifenc() {
+  if (_gifencMod) return _gifencMod;
+  _gifencMod = await import("https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js");
+  return _gifencMod;
+}
+
+/**
+ * 한 행동(stateKey)의 프레임들을 애니메이션 GIF Blob으로 인코딩한다.
+ * - 프레임 순서/속도는 skin.json과 동일하게 pingpong 확장 + store[key].dur(ms) 적용.
+ * - 프레임 2장 미만(애니메이션 아님)이면 null(호출부에서 건너뜀).
+ * - 캔버스는 첫 프레임 크기 기준, 각 프레임을 흰색 매트 위에 그려 불투명 RGBA로 만든다.
+ */
+async function buildMotionGifBlob(stateKey) {
+  const st = store[stateKey];
+  if (!st || st.frames.length < 2) return null;               // 애니메이션할 게 없음
+  const ordered = expandPingpong(st.frames, st.pingpong);      // 재생 순서(왕복 포함)
+  const { GIFEncoder, quantize, applyPalette } = await loadGifenc();
+
+  // 프레임 비트맵 디코드(첫 프레임으로 캔버스 크기 결정).
+  const bitmaps = await Promise.all(ordered.map(fr => createImageBitmap(fr.file)));
+  const W = bitmaps[0].width, H = bitmaps[0].height;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // 각 프레임을 흰색 매트 위에 그려 불투명 RGBA 데이터로 수집.
+  const frameData = bitmaps.map(bmp => {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = MOTION_MATTE;
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(bmp, 0, 0, W, H);   // 크기 다르면 첫 프레임 크기에 맞춰 그림
+    return ctx.getImageData(0, 0, W, H).data; // Uint8ClampedArray(RGBA)
+  });
+
+  // 전 프레임 공통 팔레트(플리커 방지·용량 절감). 불투명이라 rgb565로 양자화.
+  const merged = new Uint8Array(frameData.reduce((n, d) => n + d.length, 0));
+  { let off = 0; for (const d of frameData) { merged.set(d, off); off += d.length; } }
+  const palette = quantize(merged, 256, { format: "rgb565" });
+
+  const enc = GIFEncoder();
+  frameData.forEach((data, i) => {
+    const index = applyPalette(data, palette, "rgb565");
+    enc.writeFrame(index, W, H, { palette, delay: st.dur, repeat: i === 0 ? 0 : undefined });
+  });
+  enc.finish();
+  return new Blob([enc.bytesView()], { type: "image/gif" });
+}
+
 /* ---------- 검증 + skin.json 생성 ---------- */
 // 앱에 내장된 기본 스킨 id — 상점 업로드용으로 쓰면 앱 내장본과 충돌해 상점에 안 뜬다.
 // 필요하면 여기에 추가(소문자로).
@@ -1197,6 +1255,13 @@ async function buildBundleBlob() {
   prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
   for (let i = 0; i < previewFrames.length; i++) {
     prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
+  }
+
+  // 2-1) 행동별 움짤(GIF): 보유 무관 미리보기 애니메이션용. 프레임 2장 이상인 행동만 생성.
+  //      motion_{stop,running,pause,complete}.gif — 앱이 이 이름으로 탐침해 재생.
+  for (const s of STATES) {
+    const gif = await buildMotionGifBlob(s.key);
+    if (gif) prevDir.file(`motion_${s.key}.gif`, gif);
   }
 
   // 3) catalog 병합용 항목
