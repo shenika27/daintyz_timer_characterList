@@ -99,6 +99,21 @@
       "prestige": false,
       "createdAt": "2026-08-28T09:08:27",
       "version": 1
+    },
+    {
+      "skinId": "17",
+      "name": "런닝머신 홉빵이",
+      "price": 0,
+      "prestige": false,
+      "description": "런닝머신 달리는 홉빵",
+      "localized": {
+        "en": {
+          "name": "Treadmill Hope-pan",
+          "description": "Hope-pan running on a treadmill"
+        }
+      },
+      "createdAt": "2026-08-28T11:40:39",
+      "version": 1
     }
   ]
 }
