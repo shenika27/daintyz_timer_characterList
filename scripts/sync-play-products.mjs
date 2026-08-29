@@ -289,13 +289,19 @@ for (const productId of deletes) {
     if (got.status === 404) { skipped++; log(`비활성화 대상 없음(이미 삭제됨): ${productId}`); continue; }
     if (!got.ok) { errors.push(`get(삭제용) ${productId} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`); continue; }
     const opts = Array.isArray(got.json.purchaseOptions) ? got.json.purchaseOptions : [];
-    const live = opts.filter(o => o.state !== "INACTIVE" && o.state !== "INACTIVE_PUBLISHED");
-    if (live.length === 0) { skipped++; log(`이미 비활성: ${productId}`); continue; }
-    for (const o of live) {
+    // ACTIVE 만 INACTIVE 로 전환 가능. DRAFT(한 번도 판매된 적 없음)·이미 INACTIVE 는 회수 불필요 → 건너뜀.
+    // (Play는 DRAFT→INACTIVE 를 "Invalid transition"으로 400 낸다 — 활성 안 한 상품 삭제 시 이 경로.)
+    const active = opts.filter(o => o.state === "ACTIVE");
+    if (active.length === 0) {
+      skipped++;
+      log(`비활성화 불필요: ${productId} (활성 구매옵션 없음 — DRAFT/이미 비활성)`);
+      continue;
+    }
+    for (const o of active) {
       await setPurchaseOptionState(token, productId, o.purchaseOptionId, "deactivate");
     }
     deactivated++;
-    log(`비활성화: ${productId} (구매옵션 ${live.length}개)`);
+    log(`비활성화: ${productId} (구매옵션 ${active.length}개)`);
   } catch (e) {
     errors.push(String(e.message || e));
   }
