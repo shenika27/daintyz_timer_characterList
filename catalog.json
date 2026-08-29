@@ -3,21 +3,6 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
-      "skinId": "17",
-      "name": "런닝머신 홉빵이",
-      "price": 0,
-      "prestige": false,
-      "description": "런닝머신 달리는 홉빵",
-      "localized": {
-        "en": {
-          "name": "Treadmill Hope-pan",
-          "description": "Hope-pan running on a treadmill"
-        }
-      },
-      "createdAt": "2026-08-28T11:40:39",
-      "version": 1
-    },
-    {
       "skinId": "18",
       "name": "18",
       "price": 0,
@@ -27,6 +12,21 @@
         "en": {
           "name": "18",
           "description": "18"
+        }
+      },
+      "createdAt": "2026-08-29T15:56:22",
+      "version": 1
+    },
+    {
+      "skinId": "19",
+      "name": "19",
+      "price": 0,
+      "prestige": false,
+      "description": "19",
+      "localized": {
+        "en": {
+          "name": "19",
+          "description": "19"
         }
       },
       "createdAt": "2026-08-29T15:56:22",
