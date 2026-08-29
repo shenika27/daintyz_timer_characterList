@@ -1101,7 +1101,9 @@ function roundRectPath(ctx, x, y, w, h, r) {
 function drawDigits(ctx, text, rect, family, color) {
   const px = 120;
   ctx.save();
-  ctx.font = `bold ${px}px ${family}`;
+  // 앱 renderTimeBitmap은 커스텀 폰트를 볼드 없이 그대로 그린다(합성 볼드 X). 여기서 bold를 붙이면
+  // 커스텀 .ttf가 faux-bold 처리돼 미리보기 숫자만 실제 위젯보다 굵게 보인다 → bold 제거로 굵기 일치.
+  ctx.font = `${px}px ${family}`;
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   const m = ctx.measureText(text);
@@ -1421,6 +1423,12 @@ async function buildBundleBlob() {
   prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
   for (let i = 0; i < previewFrames.length; i++) {
     prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
+  }
+
+  // 상점 목록 카드용 '정지1' 원본 프레임(투명·캐릭터만, 타이머/흰배경 없음)을 stop.png로 발행한다.
+  // motion_stop.png는 타이머 박스+흰 매트 합성본이라 상점 카드에선 흰 박스로 튄다 → 별도 깨끗한 스프라이트가 필요.
+  if (store.stop?.frames?.[0]?.file) {
+    prevDir.file("stop.png", await toPngBlob(store.stop.frames[0].file));
   }
 
   // 2-1) 행동별 위젯 미리보기(보유 무관): 타이머(배경·숫자·버튼)+캐릭터를 합성해 내보낸다.
