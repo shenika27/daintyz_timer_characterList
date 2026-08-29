@@ -1,12 +1,24 @@
 {
   "retired": [
     {
+      "skinId": "15",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "16",
+      "retiredAt": "2026-08-29"
+    },
+    {
       "skinId": "cha07",
       "retiredAt": "2026-08-28"
     },
     {
       "skinId": "cha08",
       "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "cha09",
+      "retiredAt": "2026-08-29"
     },
     {
       "skinId": "cha11",

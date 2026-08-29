@@ -3,30 +3,6 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
-      "skinId": "cha09",
-      "name": "cha09",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-08-26T21:40:45",
-      "version": 1
-    },
-    {
-      "skinId": "15",
-      "name": "15",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-08-27T21:50:23",
-      "version": 1
-    },
-    {
-      "skinId": "16",
-      "name": "런닝머신 홉빵이",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-08-28T09:08:27",
-      "version": 1
-    },
-    {
       "skinId": "17",
       "name": "런닝머신 홉빵이",
       "price": 0,
