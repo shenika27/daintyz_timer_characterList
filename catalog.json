@@ -1,36 +1,5 @@
 {
   "baseUrl": "https://cdn.jsdelivr.net/gh/shenika27/daintyz_timer_characterList@main",
   "lifetimePassGiftCodes": [],
-  "skins": [
-    {
-      "skinId": "18",
-      "name": "18",
-      "price": 0,
-      "prestige": false,
-      "description": "18",
-      "localized": {
-        "en": {
-          "name": "18",
-          "description": "18"
-        }
-      },
-      "createdAt": "2026-08-29T15:56:22",
-      "version": 1
-    },
-    {
-      "skinId": "19",
-      "name": "19",
-      "price": 0,
-      "prestige": false,
-      "description": "19",
-      "localized": {
-        "en": {
-          "name": "19",
-          "description": "19"
-        }
-      },
-      "createdAt": "2026-08-29T15:56:22",
-      "version": 3
-    }
-  ]
+  "skins": []
 }
