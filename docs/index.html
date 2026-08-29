@@ -1643,16 +1643,30 @@ async function loadFrameSetInto(zip, prefix, stateKey, frameSet) {
   const pi = document.querySelector(`[data-pingpong="${stateKey}"]`); if (pi) pi.checked = pingpong;
 }
 
-// 출시된 스킨(catalog 항목 entry)을 폼 전체로 불러온다(수정용). character/zip + character/preview를 fetch·복원.
+// 출시된 스킨(catalog 항목 entry)을 폼 전체로 불러온다(수정용).
+// 무료 ZIP은 공개 GitHub, 유료 ZIP은 로그인된 빌더 Worker를 통해 비공개 R2에서 가져온다.
 async function loadSkinForEdit(entry) {
   if (!confirm(`현재 입력 내용을 버리고 '${entry.name || entry.skinId}'(${entry.skinId})을 불러옵니다.\n계속할까요?`)) return;
 
   const status = $("status");
   status.textContent = `'${entry.skinId}' 불러오는 중…`;
   try {
-    // 1) 캐릭터 zip fetch + 해제
-    const zres = await fetch(`${RAW_BASE}/character/zip/${entry.skinId}.zip?t=${Date.now()}`, { cache: "no-store" });
-    if (!zres.ok) throw new Error(`character/zip/${entry.skinId}.zip 없음 (HTTP ${zres.status})`);
+    // 1) 캐릭터 zip fetch + 해제. 유료 원본은 공개 레포에 두지 않는다.
+    const paid = Number(entry.price) > 0;
+    const zipUrl = paid
+      ? `${INBOX_API_URL}/v1/skins/${encodeURIComponent(entry.skinId)}/zip`
+      : `${RAW_BASE}/character/zip/${entry.skinId}.zip?t=${Date.now()}`;
+    const zres = await fetch(zipUrl, paid
+      ? { credentials: "include", cache: "no-store" }
+      : { cache: "no-store" });
+    if (zres.status === 401) {
+      showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
+      throw new Error("유료 스킨을 불러오려면 다시 로그인해 주세요.");
+    }
+    if (!zres.ok) {
+      const source = paid ? "비공개 유료 스킨 원본" : `character/zip/${entry.skinId}.zip`;
+      throw new Error(`${source} 없음 (HTTP ${zres.status})`);
+    }
     const zip = await JSZip.loadAsync(await zres.arrayBuffer());
     const skinJsonPath = Object.keys(zip.files).find(p => p.endsWith("skin.json"));
     if (!skinJsonPath) throw new Error("zip 안에 skin.json이 없습니다.");
