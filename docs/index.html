@@ -999,13 +999,42 @@ function toPngBlob(file) {
   });
 }
 
-/* ---------- 행동별 움짤(GIF) 생성 ----------
-   보유(다운로드) 여부와 무관하게 미리보기에서 애니메이션을 보여주기 위해, 행동별 프레임을
-   업로드 시점에 GIF로 합성해 character/preview/{id}/motion_{state}.gif 로 번들에 넣는다.
-   앱은 CDN의 이 GIF를 Coil로 재생하므로 zip(프레임 낱장) 없이도 애니메이션이 나온다. */
+/* ---------- 행동별 위젯 미리보기(타이머 합성) 생성 ----------
+   보유(다운로드) 여부와 무관하게 미리보기에서 "실제 위젯 모습"을 보여주기 위해, 행동별로
+   타이머(배경·숫자·버튼)와 캐릭터를 한 화면으로 합성해 character/preview/{id}/motion_{state}.{gif,png}
+   로 번들에 넣는다. 레이아웃은 앱 위젯의 top 모드(위=타이머 30% / 아래=캐릭터 70%) 고정.
+   앱은 CDN의 이 파일을 Coil로 그대로 재생/표시하므로 앱 코드 변경 없이 미리보기가 위젯처럼 보인다.
+   프레임 2장↑=GIF, 1장=PNG(정지). */
 
-// GIF 투명 스프라이트의 1비트 투명 계단현상을 피하려 흰색으로 매트(=앱 상세 미리보기 배경색 #FFFFFF와 일치).
+// GIF는 알파가 없으므로 흰색으로 매트(=앱 상세 미리보기 배경색 #FFFFFF와 일치).
 const MOTION_MATTE = "#ffffff";
+const BTN_INK  = "#1A1A1A";   // 내장 버튼 기호색 (= app res/values timer_digit)
+const DIGIT_INK = "#1A1A1A";  // 숫자 기본색 (폰트 color 미지정 시)
+const DIGIT_PAD_FRAC = 0.15;  // 숫자 사방 여백 비율 (= WidgetUpdater.PAD_FRAC)
+
+// 위젯 timer_section 가로 비율 (weightSum 100): 좌여백11·좌버튼12·숫자54·우버튼12·우여백11.
+const TIMER_COLS = { leftSp: 11, btnL: 12, time: 54, btnR: 12, rightSp: 11 };
+
+// 내장 버튼 기호 벡터 (24x24 viewport, app res/drawable/ic_btn_*.xml의 pathData 그대로).
+const BTN_VECTORS = {
+  minus: "M5,11 H19 V13.4 H5 Z",
+  plus:  "M10.8,5 H13.2 V10.8 H19 V13.2 H13.2 V19 H10.8 V13.2 H5 V10.8 H10.8 Z",
+  stop:  "M6,6 H18 V18 H6 Z",
+  play:  "M7,5 L19,12 L7,19 Z",
+  pause: "M6,5 H10 V19 H6 Z M14,5 H18 V19 H14 Z",
+};
+
+// 상태별 위젯 표현: 숫자 문자열 + 좌/우 버튼 심볼 키. 앱 applyButtonVisibility/Graphics와 동일 규칙.
+// 정지·완료(idle 계열) = −/+, 작동·일시정지·인터루드(진행 계열) = 정지/(작동:일시정지·일시정지:시작).
+function widgetStateSpec(stateKey) {
+  switch (stateKey) {
+    case "complete":  return { digits: "00:00", left: "minus", right: "plus" };
+    case "running":   return { digits: "09:59", left: "stop",  right: "pause" };
+    case "pause":     return { digits: "05:00", left: "stop",  right: "play" };
+    case "interlude": return { digits: "09:59", left: "stop",  right: "pause" };
+    default:          return { digits: "10:00", left: "minus", right: "plus" }; // stop 포함
+  }
+}
 
 // gifenc(경량 GIF 인코더) 지연 로드. JSZip처럼 CDN 의존(빌더는 온라인 전제).
 let _gifencMod = null;
@@ -1015,46 +1044,183 @@ async function loadGifenc() {
   return _gifencMod;
 }
 
-/**
- * 한 행동(stateKey)의 프레임들을 애니메이션 GIF Blob으로 인코딩한다.
- * - 프레임 순서/속도는 skin.json과 동일하게 pingpong 확장 + store[key].dur(ms) 적용.
- * - 프레임 2장 미만(애니메이션 아님)이면 null(호출부에서 건너뜀).
- * - 캔버스는 첫 프레임 크기 기준, 각 프레임을 흰색 매트 위에 그려 불투명 RGBA로 만든다.
- */
-async function buildMotionGifBlob(stateKey) {
-  const st = store[stateKey];
-  if (!st || st.frames.length < 2) return null;               // 애니메이션할 게 없음
-  const ordered = expandPingpong(st.frames, st.pingpong);      // 재생 순서(왕복 포함)
-  const { GIFEncoder, quantize, applyPalette } = await loadGifenc();
+// canvas fillStyle용 색 정규화. #RRGGBB는 그대로, Android식 #AARRGGBB는 알파를 떼어낸다.
+function cssColor(c, fallback) {
+  c = (c || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(c)) return c;
+  if (/^#[0-9a-fA-F]{8}$/.test(c)) return "#" + c.slice(3); // #AARRGGBB → #RRGGBB
+  return fallback;
+}
 
-  // 프레임 비트맵 디코드(첫 프레임으로 캔버스 크기 결정).
+// 타이머 합성에 필요한 공용 리소스(배경·버튼·폰트)를 번들당 한 번만 준비.
+let _timerFontSeq = 0;
+async function loadTimerContext() {
+  const tctx = {
+    bg: assets.background ? await createImageBitmap(assets.background.file) : null,
+    showBox: !assets.background,             // 앱 규칙: 배경 없으면 내장 흰 박스 폴백
+    buttonStyle: $("buttonStyle").value,     // default | skin | none
+    skinButtons: {},                         // 스킨 버튼 PNG(올린 것만)
+    fontFamily: "monospace",                 // 내장 폰트는 앱에서 monospace 고정(setFontFamily 비-remotable)
+    fontColor: cssColor($("fontColor").value, DIGIT_INK),
+  };
+  for (const b of BUTTONS) {
+    if (assets[b.key]) tctx.skinButtons[b.key] = await createImageBitmap(assets[b.key].file);
+  }
+  // 커스텀 폰트(.ttf) → FontFace로 로드해 숫자에 사용(실패 시 monospace 유지).
+  if (assets.font) {
+    const fam = `previewTimerFont_${++_timerFontSeq}`;
+    try {
+      const face = new FontFace(fam, await assets.font.file.arrayBuffer());
+      await face.load();
+      document.fonts.add(face);
+      tctx.fontFamily = fam;
+    } catch (e) { /* monospace 유지 */ }
+  }
+  return tctx;
+}
+
+// 원본을 대상 사각형 안에 비율 유지로 맞춤(fitCenter). alignTop이면 세로는 상단 정렬(top 모드 캐릭터).
+function fitRect(sw, sh, dx, dy, dw, dh, alignTop) {
+  const s = Math.min(dw / sw, dh / sh);
+  const w = sw * s, h = sh * s;
+  return { x: dx + (dw - w) / 2, y: alignTop ? dy : dy + (dh - h) / 2, w, h };
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 숫자를 고해상으로 측정→PAD_FRAC 여백 포함해 time_area에 fitCenter(앱 renderTimeBitmap과 동일 규칙).
+function drawDigits(ctx, text, rect, family, color) {
+  const px = 120;
+  ctx.save();
+  ctx.font = `bold ${px}px ${family}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  const m = ctx.measureText(text);
+  const tw = m.width;
+  const asc = m.actualBoundingBoxAscent  || px * 0.8;
+  const desc = m.actualBoundingBoxDescent || px * 0.2;
+  const th = asc + desc;
+  const padX = tw * DIGIT_PAD_FRAC, padY = th * DIGIT_PAD_FRAC;
+  const bw = tw + padX * 2, bh = th + padY * 2;
+  const fit = fitRect(bw, bh, rect.x, rect.y, rect.w, rect.h, false);
+  ctx.translate(fit.x, fit.y);
+  ctx.scale(fit.w / bw, fit.h / bh);
+  ctx.fillStyle = color;
+  ctx.fillText(text, padX, padY + asc);
+  ctx.restore();
+}
+
+// 버튼 한 칸: 스킨 PNG가 있으면 그것, 없으면 내장 벡터(24x24). none은 빈 슬롯.
+function drawButton(ctx, symbolKey, cell, tctx) {
+  if (tctx.buttonStyle === "none") return;
+  const pad = Math.min(cell.w, cell.h) * 0.20; // ≈ 5dp 상대 여백
+  const ix = cell.x + pad, iy = cell.y + pad, iw = cell.w - pad * 2, ih = cell.h - pad * 2;
+  if (iw <= 0 || ih <= 0) return;
+  const png = tctx.buttonStyle === "skin" ? tctx.skinButtons[symbolKey] : null;
+  if (png) {
+    const f = fitRect(png.width, png.height, ix, iy, iw, ih, false);
+    ctx.drawImage(png, f.x, f.y, f.w, f.h);
+  } else {
+    const f = fitRect(24, 24, ix, iy, iw, ih, false);
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.scale(f.w / 24, f.h / 24);
+    ctx.fillStyle = BTN_INK;
+    ctx.fill(new Path2D(BTN_VECTORS[symbolKey]));
+    ctx.restore();
+  }
+}
+
+// 타이머 바(배경/내장박스 + 좌/우 버튼 + 숫자)를 box 영역에 그린다.
+function drawTimerBar(ctx, box, tctx, stateKey) {
+  const spec = widgetStateSpec(stateKey);
+  if (tctx.bg) {
+    ctx.drawImage(tctx.bg, box.x, box.y, box.w, box.h);  // fitXY (앱 iv_timer_bg와 동일)
+  } else if (tctx.showBox) {
+    const sw = Math.max(2, box.h * 0.04), r = box.h * 0.14; // ≈ 3dp 테두리 / 10dp 라운드
+    roundRectPath(ctx, box.x + sw / 2, box.y + sw / 2, box.w - sw, box.h - sw, r);
+    ctx.fillStyle = "#FFFFFF"; ctx.fill();
+    ctx.lineWidth = sw; ctx.strokeStyle = "#2B2B2B"; ctx.stroke();
+  }
+  // 컬럼 누적 x (weightSum 100)
+  let x = box.x; const col = {};
+  for (const [k, wt] of Object.entries(TIMER_COLS)) { const w = box.w * wt / 100; col[k] = { x, w }; x += w; }
+  drawButton(ctx, spec.left,  { x: col.btnL.x, y: box.y, w: col.btnL.w, h: box.h }, tctx);
+  drawButton(ctx, spec.right, { x: col.btnR.x, y: box.y, w: col.btnR.w, h: box.h }, tctx);
+  drawDigits(ctx, spec.digits, { x: col.time.x, y: box.y, w: col.time.w, h: box.h }, tctx.fontFamily, tctx.fontColor);
+}
+
+// 위젯 형태 기하(top 고정): 위=타이머 30% / 아래=캐릭터 70%. 캐릭터 프레임 크기 기준으로 산출.
+function widgetGeom(cw, ch) {
+  const charH = ch;
+  const timerH = Math.round(charH * 3 / 7);   // 타이머:캐릭터 = 3:7
+  const gap = Math.round(charH * 0.02);        // 위젯 marginTop(4dp) 근사
+  const marginH = Math.round(cw * 0.03);       // 위젯 marginHorizontal(6dp) 근사
+  return {
+    W: cw, H: timerH + gap + charH,
+    timerBox: { x: marginH, y: 0, w: cw - marginH * 2, h: timerH },
+    charRegion: { x: 0, y: timerH + gap, w: cw, h: charH },
+  };
+}
+
+// 한 프레임 합성: 흰 매트 → 타이머 바 → 캐릭터(top 정렬 fitCenter).
+function composeWidgetFrame(ctx, geom, charBmp, tctx, stateKey) {
+  ctx.clearRect(0, 0, geom.W, geom.H);
+  ctx.fillStyle = MOTION_MATTE; ctx.fillRect(0, 0, geom.W, geom.H);
+  drawTimerBar(ctx, geom.timerBox, tctx, stateKey);
+  const cr = geom.charRegion;
+  const f = fitRect(charBmp.width, charBmp.height, cr.x, cr.y, cr.w, cr.h, true);
+  ctx.drawImage(charBmp, f.x, f.y, f.w, f.h);
+}
+
+/**
+ * 한 행동(stateKey)을 위젯 합성으로 렌더한다.
+ * - 프레임 순서/속도는 skin.json과 동일하게 pingpong 확장 + store[key].dur(ms).
+ * - 2프레임↑ → 애니메이션 GIF, 1프레임 → 정지 PNG, 0프레임 → null(건너뜀).
+ * 반환: { ext:"gif"|"png", blob } | null.
+ */
+async function buildWidgetMotionAsset(stateKey, tctx) {
+  const st = store[stateKey];
+  if (!st || st.frames.length === 0) return null;
+  const single = st.frames.length === 1;
+  const ordered = single ? [st.frames[0]] : expandPingpong(st.frames, st.pingpong);
   const bitmaps = await Promise.all(ordered.map(fr => createImageBitmap(fr.file)));
-  const W = bitmaps[0].width, H = bitmaps[0].height;
+  const geom = widgetGeom(bitmaps[0].width, bitmaps[0].height);
   const canvas = document.createElement("canvas");
-  canvas.width = W; canvas.height = H;
+  canvas.width = geom.W; canvas.height = geom.H;
   const ctx = canvas.getContext("2d");
 
-  // 각 프레임을 흰색 매트 위에 그려 불투명 RGBA 데이터로 수집.
-  const frameData = bitmaps.map(bmp => {
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = MOTION_MATTE;
-    ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(bmp, 0, 0, W, H);   // 크기 다르면 첫 프레임 크기에 맞춰 그림
-    return ctx.getImageData(0, 0, W, H).data; // Uint8ClampedArray(RGBA)
-  });
+  if (single) {
+    composeWidgetFrame(ctx, geom, bitmaps[0], tctx, stateKey);
+    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+    return { ext: "png", blob };
+  }
 
+  const { GIFEncoder, quantize, applyPalette } = await loadGifenc();
+  const frameData = bitmaps.map(bmp => {
+    composeWidgetFrame(ctx, geom, bmp, tctx, stateKey);
+    return ctx.getImageData(0, 0, geom.W, geom.H).data;
+  });
   // 전 프레임 공통 팔레트(플리커 방지·용량 절감). 불투명이라 rgb565로 양자화.
   const merged = new Uint8Array(frameData.reduce((n, d) => n + d.length, 0));
   { let off = 0; for (const d of frameData) { merged.set(d, off); off += d.length; } }
   const palette = quantize(merged, 256, { format: "rgb565" });
-
   const enc = GIFEncoder();
   frameData.forEach((data, i) => {
     const index = applyPalette(data, palette, "rgb565");
-    enc.writeFrame(index, W, H, { palette, delay: st.dur, repeat: i === 0 ? 0 : undefined });
+    enc.writeFrame(index, geom.W, geom.H, { palette, delay: st.dur, repeat: i === 0 ? 0 : undefined });
   });
   enc.finish();
-  return new Blob([enc.bytesView()], { type: "image/gif" });
+  return { ext: "gif", blob: new Blob([enc.bytesView()], { type: "image/gif" }) };
 }
 
 /* ---------- 검증 + skin.json 생성 ---------- */
@@ -1257,18 +1423,13 @@ async function buildBundleBlob() {
     prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
   }
 
-  // 2-1) 행동별 미리보기(보유 무관): 프레임 2장 이상이면 움짤(GIF), 1장이면 정지 PNG로 내보낸다.
+  // 2-1) 행동별 위젯 미리보기(보유 무관): 타이머(배경·숫자·버튼)+캐릭터를 합성해 내보낸다.
+  //      2장 이상이면 움짤(GIF), 1장이면 정지 PNG.
   //      motion_{stop,running,pause,complete,interlude}.{gif,png} — 앱이 이 이름으로 탐침해 재생/표시.
+  const tctx = await loadTimerContext();
   async function addMotionAsset(stateKey) {
-    const st = store[stateKey];
-    if (!st || st.frames.length === 0) return;
-    if (st.frames.length === 1) {
-      // 1프레임은 움짤이 무의미 → 그 PNG 그대로 미리보기로.
-      prevDir.file(`motion_${stateKey}.png`, await toPngBlob(st.frames[0].file));
-    } else {
-      const gif = await buildMotionGifBlob(stateKey);
-      if (gif) prevDir.file(`motion_${stateKey}.gif`, gif);
-    }
+    const asset = await buildWidgetMotionAsset(stateKey, tctx);
+    if (asset) prevDir.file(`motion_${stateKey}.${asset.ext}`, asset.blob);
   }
   for (const s of STATES) await addMotionAsset(s.key);
   // 특수 모션(인터루드)이 실제로 skin.json에 포함됐을 때만 미리보기로 추가.
