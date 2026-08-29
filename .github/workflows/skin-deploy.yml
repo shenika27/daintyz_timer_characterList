@@ -18,6 +18,13 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    # R2 CLI 버전을 '정확히' 고정한다(범위 @3 는 최신 3.x로 드리프트한다).
+    #   최신 3.x(3.114.x)의 `r2 object put/delete` 는 remote 가 기본이고 `--remote` 플래그가
+    #   제거되어, 예전 명령의 `--remote` 를 주면 "Unknown argument: remote" 로 죽는다.
+    #   → 아래 두 R2 스텝은 이 핀 버전만 쓰고 `--remote` 를 붙이지 않는다(remote=기본).
+    #   버전을 올릴 땐 해당 버전의 `wrangler r2 object put --help` 로 플래그를 먼저 확인할 것.
+    env:
+      WRANGLER: "wrangler@3.114.17"
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +62,7 @@ jobs:
           for f in "${uploads[@]}"; do
             key="$(basename "$f")"
             echo "R2 업로드: daintyz-skins/$key"
-            npx -y wrangler@3 r2 object put "daintyz-skins/$key" --file "$f" --remote
+            npx -y "$WRANGLER" r2 object put "daintyz-skins/$key" --file "$f"
           done
 
       # 유료 스킨이 새로 올라오면 Play 인앱상품(SKU)을 자동 등록/수정한다.
@@ -107,5 +114,5 @@ jobs:
           while IFS= read -r key; do
             [ -n "$key" ] || continue
             echo "R2 삭제: daintyz-skins/$key"
-            npx -y wrangler@3 r2 object delete "daintyz-skins/$key" --remote
+            npx -y "$WRANGLER" r2 object delete "daintyz-skins/$key"
           done < _r2_delete.txt
