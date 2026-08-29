@@ -17,6 +17,11 @@
       "retiredAt": "2026-08-29"
     },
     {
+      "skinId": "19",
+      "productId": "skin_19",
+      "retiredAt": "2026-08-29"
+    },
+    {
       "skinId": "cha07",
       "retiredAt": "2026-08-28"
     },
@@ -43,6 +48,16 @@
     {
       "skinId": "cha14",
       "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "sikpanc01",
+      "productId": "skin_sikpanc01",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "sikpanc02",
+      "productId": "skin_sikpanc02",
+      "retiredAt": "2026-08-29"
     }
   ]
 }
