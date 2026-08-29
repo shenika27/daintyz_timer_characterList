@@ -1,7 +1,7 @@
 # _inbox — 스킨 업로드함
 
 스킨빌더로 만든 **번들 zip(`{skinId}.zip`)을 이 폴더에 올리기만** 하면 됩니다.
-나머지(압축 풀기 · `character/zip/`·`character/preview/` 배치 · `catalog.json` 갱신)는 GitHub Action이 자동으로 처리하고, 올린 zip은 처리 후 자동으로 사라집니다.
+나머지(압축 풀기 · 공개 미리보기와 무료 zip 배치 · 유료 zip R2 이동 · `catalog.json` 갱신)는 GitHub Action이 자동으로 처리하고, 올린 zip은 처리 후 자동으로 사라집니다.
 
 ## 올리는 방법 (소스트리/git 몰라도 됨)
 
@@ -21,6 +21,6 @@
 - `catalog.json`에서 해당 테마 항목 제거
 - `character/zip/{skinId}.zip` 및 `character/preview/{skinId}/` 제거
 - 유료 테마이면 R2의 비공개 zip 삭제 예약
-- 유료 테마이면 Play Console 인앱상품 SKU를 삭제 대신 `inactive`로 비활성화
+- 유료 테마이면 미판매 `DRAFT` SKU는 하드삭제하고, 활성화 또는 판매 이력이 있는 SKU는 `inactive`로 비활성화
 
-삭제 마커에 `productId`가 포함되어 있으면 catalog 항목이 이미 사라진 상태에서도 해당 SKU를 비활성화 대상으로 사용합니다.
+삭제 마커에 `productId`가 포함되어 있으면 catalog 항목이 이미 사라진 상태에서도 해당 SKU를 정리 대상으로 사용합니다.

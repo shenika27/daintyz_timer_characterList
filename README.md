@@ -25,21 +25,21 @@ scripts/sync-play-products.mjs  ← 유료 스킨 Play 인앱상품(SKU) 등록/
 catalog.json                    ← 앱이 읽는 테마 목록 (+ baseUrl)
 _retired_ids.json               ← 삭제된 skinId/productId 원장 (재사용 감지·차단용, PART 3 참고)
 character/                      ← 테마 에셋 묶음
-  zip/{skinId}.zip              ← 테마 한 세트 (skin.json + 캐릭터·타이머 PNG들)
+  zip/{skinId}.zip              ← 무료 테마 한 세트 (유료 원본은 비공개 R2에만 저장)
   preview/{skinId}/thumb.png    ← 테마 썸네일 (상점·창고 목록 공용)
   preview/{skinId}/stop.png     ← 상점 카드용 투명 정지 스프라이트
   preview/{skinId}/motion_*.gif ← 상세화면 행동별 미리보기(1프레임 상태는 PNG)
 ```
 
 - 테마별 표시 에셋은 **`character/preview/{skinId}/` 한 폴더에 모읍니다.** 빌더가 `thumb.png`, `stop.png`, `motion_{state}.{gif,png}`를 배치합니다.
-- zip 안 파일명/구조는 그대로(루트에 `skin.json` + PNG들). zip을 **`character/zip/` 폴더 아래**에 둡니다.
+- zip 안 파일명/구조는 그대로(루트에 `skin.json` + PNG들)입니다. 무료 zip만 **`character/zip/` 폴더 아래**에 두고, 유료 zip은 비공개 R2에만 둡니다.
 - 표시 에셋은 **zip 밖 독립 파일**이라 다운로드 전에도 상점·창고·상세 화면에서 바로 볼 수 있습니다.
 
-**신규 테마 출시(권장) = 스킨빌더 로그인 → 내용 작성 → `자동 업로드`**면 끝입니다. 인증된 Worker가 번들을 `_inbox/`에 커밋하고, `character/zip/`·`character/preview/` 배치와 `catalog.json` 갱신은 GitHub Action이 자동 처리합니다(아래 **PART 3** 참고). zip을 내려받아 GitHub 웹에서 직접 올리는 수동 방식도 그대로 사용할 수 있습니다.
+**신규 테마 출시(권장) = 스킨빌더 로그인 → 내용 작성 → `자동 업로드`**면 끝입니다. 인증된 Worker가 번들을 `_inbox/`에 커밋하고, 공개 미리보기·무료 zip 배치, 유료 zip의 R2 이동, `catalog.json` 갱신은 GitHub Action이 자동 처리합니다(아래 **PART 3** 참고). zip을 내려받아 GitHub 웹에서 직접 올리는 수동 방식도 그대로 사용할 수 있습니다.
 반영 후 10~15분이면 jsDelivr CDN을 통해 앱 목록에 나타납니다.
 
-> ⚠️ `catalog.json`은 항상 최신이 필요해 앱이 **raw.githubusercontent**에서 받고, 무거운 에셋(zip/썸네일/행동 미리보기)은
-> catalog의 `baseUrl`(jsDelivr CDN)에서 받습니다. jsDelivr는 `@main`을 ~12시간 캐싱하니 급하면 [purge.jsdelivr.net]으로 무효화하세요.
+> ⚠️ `catalog.json`은 항상 최신이 필요해 앱이 **raw.githubusercontent**에서 받습니다. 공개 썸네일·행동 미리보기와 무료 zip은
+> catalog의 `baseUrl`(jsDelivr CDN)에서 받고, 유료 zip은 결제 검증 Worker가 R2에서 전달합니다. jsDelivr는 `@main`을 ~12시간 캐싱하니 급하면 [purge.jsdelivr.net]으로 무효화하세요.
 
 ---
 ---
@@ -452,13 +452,13 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 자동 업로드를 사용할 수 없는 경우에는 **`⬇ 번들 zip 만들기`**로 `{skinId}.zip`을 받은 뒤, 이 레포의 `_inbox` 폴더에서 **`Add file ▸ Upload files`**로 직접 올리고 Commit 합니다.
 
 > 업로드하면 GitHub Action(`.github/workflows/skin-deploy.yml`)이 자동으로:
-> 번들을 풀어 `character/zip/{id}.zip`·`character/preview/{id}/` 배치 + `catalog.json`에 항목 upsert(기존이면 version +1)
-> + (유료면) zip을 비공개 R2로 업로드 + **Play 인앱상품(SKU) 자동 등록** + 올린 inbox zip 삭제 후 커밋.
+> 번들을 풀어 `character/preview/{id}/`와 무료 `character/zip/{id}.zip` 배치 + `catalog.json`에 항목 upsert(기존이면 version +1)
+> + (유료면) 공개 zip을 남기지 않고 비공개 R2로 업로드 + **Play 인앱상품(SKU) 자동 등록** + 올린 inbox zip 삭제 후 커밋.
 > 즉 아래 "수동 절차"를 사람이 안 해도 됩니다. catalog 항목·파일명·폴더 규칙이 빌더에서 자동으로 맞춰집니다.
 
 ### 스킨빌더 로그인·인증 운영
 
-스킨빌더 진입과 자동 업로드에는 운영자가 발급한 계정 로그인이 필요합니다. 비밀번호를 잊었거나 계정이 필요한 경우 운영 담당자에게 문의하세요. 계정·데이터베이스·배포 절차와 Worker 소스는 비공개 운영 저장소에서 관리합니다.
+스킨빌더 진입과 자동 업로드에는 운영자가 발급한 계정 로그인이 필요합니다. 비밀번호를 잊었거나 계정이 필요한 경우 운영 담당자에게 문의하세요. 계정·데이터베이스·배포 절차와 Worker 소스는 앱 저장소의 `infra/skin-builder-worker/`에서 관리합니다.
 
 > 로그인 화면은 정적 GitHub Pages의 진입 UI를 잠그고, 실제 보호가 필요한 자동 업로드는 Worker가 서버 측에서 인증합니다. GitHub Pages의 HTML 소스 자체를 비공개로 만드는 구조는 아닙니다.
 
@@ -476,12 +476,12 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 
 ### 출시된 스킨 수정/삭제
 
-스킨빌더 오른쪽의 **출시된 스킨** 목록은 `catalog.json`과 기존 zip/preview를 불러와 수정용 폼으로 복원합니다.
+스킨빌더 오른쪽의 **출시된 스킨** 목록은 `catalog.json`과 기존 zip/preview를 불러와 수정용 폼으로 복원합니다. 무료 zip은 공개 GitHub에서, 유료 zip은 로그인 세션을 확인한 빌더 Worker가 비공개 R2에서 가져옵니다.
 
 - 기존 테마를 고른 뒤 수정해서 자동 업로드하면 같은 `skinId` 항목이 갱신되고 `version`이 올라갑니다.
 - 목록의 삭제 버튼으로 확인하면 `{skinId}.delete.json` 삭제 마커가 자동 업로드됩니다. 수동 방식을 선택한 경우에만 마커 파일을 `_inbox`에 직접 올립니다. 처리되면
   `character/zip/{skinId}.zip`, `character/preview/{skinId}/`, `catalog.json` 항목이 정리됩니다.
-- 삭제 마커에 `productId`가 있으면 catalog 항목이 이미 사라진 상태에서도 해당 Play SKU를 `inactive`로 비활성화할 수 있습니다.
+- 삭제 마커에 `productId`가 있으면 catalog 항목이 이미 사라진 상태에서도 Play 상품을 정리합니다. 구매옵션이 모두 `DRAFT`인 미판매 상품은 하드삭제하고, 활성화 또는 판매 이력이 있는 상품은 구매 이력을 보존하도록 비활성화만 합니다.
 
 ### 삭제된 id 원장 (`_retired_ids.json`) — skinId/productId 재사용 차단 ★
 
@@ -506,7 +506,7 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 - **신규 상품은 `비활성(inactive)`으로 생성**됩니다 — 가격 오타가 곧바로 실판매로 이어지지 않게.
   Play Console에서 상품을 확인하고 **`활성`만 누르면** 판매가 시작됩니다.
 - **이미 있는 상품은 기존 상태를 보존**합니다(활성 상품을 비활성으로 되돌리지 않음). 가격·이름만 갱신.
-- 빌더에서 스킨을 삭제하면 해당 SKU는 **하드 삭제 대신 비활성화**됩니다(구매 이력 보존).
+- 빌더에서 스킨을 삭제하면 구매옵션이 모두 `DRAFT`인 미판매 SKU만 하드삭제합니다. 활성화 또는 판매 이력이 있는 SKU는 구매 이력 보존을 위해 비활성화만 합니다.
 - 무료 전용 업로드면 이 단계는 통째로 건너뜁니다(토큰 없이도 무료 파이프라인 정상 동작).
 - 처음 등장하는 스킨이 **이미 존재하는 `productId`를 재사용하면 기본 차단**됩니다(위 [삭제된 id 원장](#삭제된-id-원장-_retired_idsjson--skinidproductid-재사용-차단-) 참고).
 
@@ -539,8 +539,9 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 
 ## 수동 절차 (빌더 없이 직접 할 때 / 동작 이해용)
 
-### 1. zip으로 묶기 → `character/zip/`에 배치
-zip 안은 그대로(루트에 `skin.json` + PNG들), 파일을 `character/zip/{skinId}.zip` 위치에 둡니다.
+### 1. zip으로 묶기 → 무료는 공개 배치, 유료는 자동 파이프라인 사용
+zip 안은 그대로(루트에 `skin.json` + PNG들)입니다. 무료 테마만 `character/zip/{skinId}.zip` 위치에 직접 둘 수 있습니다.
+유료 테마는 공개 저장소에 원본이 남지 않도록 반드시 `_inbox` 자동 파이프라인으로 올려 R2에 배치합니다.
 ```
 character/zip/newchar.zip
 ├── skin.json
@@ -601,9 +602,10 @@ character/preview/newchar/motion_running.gif
 | `createdAt` | string | ❌ | 출시일 `"yyyy-MM-dd"`. 상점 NEW 배지 판정(출시일+7일 이내). 생략 시 NEW 안 뜸 |
 | `version` | number | ❌ | 테마 버전(사람이 보는 체인지로그용 — 앱 동작엔 미사용). 스킨빌더 자동배치 시 재업로드면 +1 됨 |
 
-> **자동 유추 경로** (`{baseUrl}/` 기준): `character/zip/{skinId}.zip`, `character/preview/{skinId}/thumb.png`.
+> **공개 자동 유추 경로** (`{baseUrl}/` 기준): 무료 zip은 `character/zip/{skinId}.zip`, 미리보기는 `character/preview/{skinId}/thumb.png`.
+> 유료 zip 다운로드 경로는 공개 catalog URL이 아니라 앱의 결제 검증 Worker가 결정합니다.
 > 행동별 미리보기는 같은 폴더의 `motion_{state}.{gif,png}`를 앱이 자동 탐침합니다.
 > 특수한 경우만 catalog 항목에 `zipUrl`/`thumbnailUrl`로 개별 덮어쓸 수 있습니다(이 둘만 오버라이드 지원).
 
 ### 4. git push
-`character/zip/` + 썸네일/행동 미리보기 + `catalog.json` 커밋 후 push → **10~15분 후** CDN 반영 → 앱 목록에 표시.
+무료 테마는 `character/zip/` + 썸네일/행동 미리보기 + `catalog.json` 커밋 후 push합니다. 유료 테마는 수동 공개 배치 대신 `_inbox` 파이프라인을 사용합니다. **10~15분 후** CDN 반영 → 앱 목록에 표시됩니다.
