@@ -250,8 +250,14 @@ for (const item of upserts) {
     // 방법3: 새 스킨(catalog에 처음 등장)이 이미 존재하는 productId를 재사용하려는 경우 차단.
     //   기존 상품엔 과거 구매 이력이 남아 있어, 그대로 갱신하면 옛 구매자가 새 스킨을 무료로 언락한다.
     //   같은 스킨의 수정/재업로드는 isNew=false 라 여기 안 걸린다(정상 수정 경로로 진행).
-    if (exists && item.isNew && !ALLOW_REUSE) {
-      errors.push(`productId 재사용 차단: '${productId}' 는 이미 Play에 존재합니다(과거 구매 이력 가능). ` +
+    //   단, 'DRAFT 전용' 상품은 예외 — 한 번도 활성/판매된 적이 없어 구매자가 0이라 누수 위험이 없다.
+    //   이는 보통 '상품은 batchUpdate로 생성됐는데 같은 런이 뒤에서 실패해 catalog 커밋만 안 된'
+    //   우리 파이프라인 잔여물이다. 이걸 막으면 재실행마다 같은 지점에서 죽는 영구 데드락이 되므로,
+    //   판매 이력 가능성이 있는(=DRAFT 아닌 구매옵션이 하나라도 있는) 상품만 차단한다.
+    const everLive = Array.isArray(got.json.purchaseOptions)
+      && got.json.purchaseOptions.some(o => o.state && o.state !== "DRAFT" && o.state !== "STATE_UNSPECIFIED");
+    if (exists && item.isNew && !ALLOW_REUSE && everLive) {
+      errors.push(`productId 재사용 차단: '${productId}' 는 이미 Play에 활성/판매 이력이 있는 상품입니다(옛 구매자 누수 위험). ` +
         `새 스킨 '${item.skinId}' 에는 새 productId를 쓰세요. ` +
         `정당한 재시도로 강행하려면 워크플로 env ALLOW_PRODUCT_ID_REUSE=1 로 실행하세요.`);
       continue;
