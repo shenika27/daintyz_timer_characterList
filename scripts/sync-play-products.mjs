@@ -220,6 +220,13 @@ async function setPurchaseOptionState(token, productId, purchaseOptionId, action
   return r.json;
 }
 
+/** 상품 하드삭제(되돌릴 수 없음). '한 번도 판매된 적 없는' 상품에만 쓴다(호출부에서 판정). */
+async function deleteProduct(token, productId) {
+  const r = await apiFetch(token, otpUrl(productId), "DELETE");
+  // 이미 없으면(404) 성공으로 본다(idempotent).
+  if (!r.ok && r.status !== 404) throw new Error(`delete ${productId} 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
+}
+
 /** 기존 상품에서 첫 구매옵션 id를 얻는다(없으면 기본값). */
 function existingPurchaseOptionId(existing) {
   const opts = existing?.purchaseOptions;
@@ -232,7 +239,7 @@ const SA = (() => {
 })();
 
 const token = await getAccessToken(SA);
-let created = 0, updated = 0, deactivated = 0, skipped = 0;
+let created = 0, updated = 0, deactivated = 0, hardDeleted = 0, skipped = 0;
 const errors = [];
 
 // 등록/수정: GET → 없으면 생성(구매옵션 DRAFT), 있으면 리스팅·가격만 갱신(state 보존).
@@ -288,32 +295,44 @@ for (const item of upserts) {
   }
 }
 
-// 삭제된 유료 스킨: 하드삭제 대신 구매옵션 비활성화(구매 이력 보존).
+// 삭제된 유료 스킨 처리 — 판매 이력 유무로 분기:
+//   · '한 번도 판매/노출 안 됨'(구매옵션 전부 DRAFT) → 하드삭제(구매자 0이라 안전, Play도 깨끗이 정리)
+//   · '활성/판매 이력 있음'(DRAFT 아닌 옵션 존재)     → 소프트 비활성화만(구매 이력 보존, 하드삭제 금지)
 for (const productId of deletes) {
   try {
     const got = await apiFetch(token, otpUrl(productId), "GET");
-    if (got.status === 404) { skipped++; log(`비활성화 대상 없음(이미 삭제됨): ${productId}`); continue; }
+    if (got.status === 404) { skipped++; log(`삭제 대상 없음(이미 삭제됨): ${productId}`); continue; }
     if (!got.ok) { errors.push(`get(삭제용) ${productId} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`); continue; }
     const opts = Array.isArray(got.json.purchaseOptions) ? got.json.purchaseOptions : [];
-    // ACTIVE 만 INACTIVE 로 전환 가능. DRAFT(한 번도 판매된 적 없음)·이미 INACTIVE 는 회수 불필요 → 건너뜀.
-    // (Play는 DRAFT→INACTIVE 를 "Invalid transition"으로 400 낸다 — 활성 안 한 상품 삭제 시 이 경로.)
+    const everLive = opts.some(o => o.state && o.state !== "DRAFT" && o.state !== "STATE_UNSPECIFIED");
+
+    if (!everLive) {
+      // 전부 DRAFT = 한 번도 판매/노출된 적 없음 → 하드삭제(되돌릴 수 없지만 누수 0).
+      await deleteProduct(token, productId);
+      hardDeleted++;
+      log(`하드삭제(미판매): ${productId}`);
+      continue;
+    }
+
+    // 판매 이력 가능 → 이력 보존을 위해 하드삭제하지 않고 ACTIVE 옵션만 INACTIVE 로 내린다.
+    // (DRAFT→INACTIVE 는 Play가 "Invalid transition" 400 을 내므로 ACTIVE 만 대상으로 한다.)
     const active = opts.filter(o => o.state === "ACTIVE");
     if (active.length === 0) {
       skipped++;
-      log(`비활성화 불필요: ${productId} (활성 구매옵션 없음 — DRAFT/이미 비활성)`);
+      log(`비활성화 불필요(이력 보존): ${productId} (활성 구매옵션 없음 — 이미 비활성)`);
       continue;
     }
     for (const o of active) {
       await setPurchaseOptionState(token, productId, o.purchaseOptionId, "deactivate");
     }
     deactivated++;
-    log(`비활성화: ${productId} (구매옵션 ${active.length}개)`);
+    log(`비활성화(이력 보존): ${productId} (구매옵션 ${active.length}개)`);
   } catch (e) {
     errors.push(String(e.message || e));
   }
 }
 
-log(`완료: 등록 ${created}, 수정 ${updated}, 비활성화 ${deactivated}, 건너뜀 ${skipped}.`);
+log(`완료: 등록 ${created}, 수정 ${updated}, 비활성화 ${deactivated}, 하드삭제 ${hardDeleted}, 건너뜀 ${skipped}.`);
 
 if (errors.length > 0) {
   for (const e of errors) console.error(`::error::[sync-play-products] ${e}`);
