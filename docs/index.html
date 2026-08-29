@@ -456,22 +456,16 @@
     </div>
   </section>
 
-  <!-- 4. 미리보기 이미지 -->
+  <!-- 4. 대표 썸네일 -->
   <section class="card">
-    <h2>4. 미리보기 이미지</h2>
+    <h2>4. 대표 썸네일</h2>
     <p class="hint"><b>썸네일은 필수</b>입니다(상점 목록·타이머 탭에 뜨는 대표 이미지).<br>
-      미리보기는 여러 장 올리면 상세화면 갤러리에 순서대로 표시됩니다.</p>
+      상세화면의 행동별 미리보기는 위 프레임에서 자동 생성됩니다.</p>
     <div class="grid">
       <div class="state-card req">
         <h3>썸네일 (thumb.png)</h3>
         <p class="sub">상점 카드·타이머 탭에 뜨는 대표 1장.<br>정사각형 권장(아니면 경고), 한 변 1024px 이하.</p>
         <div id="asset_thumb"></div>
-      </div>
-      <div class="state-card">
-        <h3>미리보기 갤러리 (prev01, prev02…)</h3>
-        <p class="sub">상세화면에서 넘겨 보는 이미지들. 없으면 갤러리 생략(썸네일만).</p>
-        <div class="drop" id="prevDrop">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
-        <ul class="frames" id="frames_prev"></ul>
       </div>
     </div>
   </section>
@@ -592,14 +586,30 @@ const ITL_DEF_DUR = 250;
 store.interlude = { frames: [], dur: ITL_DEF_DUR, pingpong: false };
 // 단일 에셋 저장소: background, minus.., font
 const assets = {};
-// 미리보기 저장소: thumb(단일) + prev 프레임 배열
+// 상점·창고 대표 썸네일. 행동별 상세 미리보기는 상태 프레임에서 자동 생성한다.
 let previewThumb = null;            // { file, url } | null
-const previewFrames = [];           // [{ id, file, url }]
 
 let frameSeq = 0;
 
 /* ---------- 공용 헬퍼 ---------- */
 const $ = (id) => document.getElementById(id);
+
+function releaseFrameUrls(frames) {
+  frames.forEach(frame => URL.revokeObjectURL(frame.url));
+}
+
+function clearPreviewThumb() {
+  if (!previewThumb) return;
+  URL.revokeObjectURL(previewThumb.url);
+  previewThumb = null;
+}
+
+function clearAssetStore() {
+  Object.keys(assets).forEach(key => {
+    if (assets[key].url) URL.revokeObjectURL(assets[key].url);
+    delete assets[key];
+  });
+}
 
 function extOf(name, fallback) {
   const m = /\.([a-zA-Z0-9]+)$/.exec(name || "");
@@ -909,7 +919,7 @@ function outNameFor(slotId, file) {
   return `btn_${slotId}.${extOf(file.name, "png")}`; // minus/plus/play/pause/stop
 }
 
-/* ---------- 미리보기(썸네일 + prev 갤러리) ---------- */
+/* ---------- 대표 썸네일 ---------- */
 let thumbRender = null; // 편집 로드에서 다시 그리기 위해 보관.
 
 function buildThumbSlot() {
@@ -933,7 +943,7 @@ function buildThumbSlot() {
         <div class="meta"><b>썸네일</b><span>thumb.png</span></div>
         <button class="clear-x" type="button" title="제거">✕</button></div>`;
       view.querySelector(".clear-x").onclick = () => {
-        URL.revokeObjectURL(previewThumb.url); previewThumb = null; render(); refresh();
+        clearPreviewThumb(); render(); refresh();
       };
     }
   }
@@ -944,7 +954,7 @@ function buildThumbSlot() {
     if (!sz) return;
     if (sz.w !== sz.h &&
         !confirm(`썸네일이 정사각형이 아닙니다(${sz.w}×${sz.h}).\n상점 카드·타이머 탭에서 잘려 보일 수 있어요. 그래도 사용할까요?`)) return;
-    if (previewThumb) URL.revokeObjectURL(previewThumb.url);
+    clearPreviewThumb();
     previewThumb = { file: f, url: URL.createObjectURL(f) };
     render(); refresh();
   });
@@ -952,39 +962,7 @@ function buildThumbSlot() {
   render();
 }
 
-function buildPrevList() {
-  wireDropZone($("prevDrop"), addPrev);
-}
-
-async function addPrev(fileList) {
-  for (const f of [...fileList]) {
-    if (!f.type.startsWith("image/")) continue;
-    if (!await checkImageSize(f, `'${f.name}'은(는)`)) continue;
-    previewFrames.push({ id: ++frameSeq, file: f, url: URL.createObjectURL(f) });
-  }
-  renderPrev(); refresh();
-}
-
-function renderPrev() {
-  const ul = $("frames_prev");
-  ul.innerHTML = "";
-  previewFrames.forEach((fr, i) => {
-    ul.appendChild(frameListItem(fr.url, `prev${pad2(i + 1)}.png`, {
-      onUp: () => movePrev(i, -1),
-      onDown: () => movePrev(i, 1),
-      onDel: () => { URL.revokeObjectURL(fr.url); previewFrames.splice(i, 1); renderPrev(); refresh(); },
-    }));
-  });
-}
-
-function movePrev(i, dir) {
-  const j = i + dir;
-  if (j < 0 || j >= previewFrames.length) return;
-  [previewFrames[i], previewFrames[j]] = [previewFrames[j], previewFrames[i]];
-  renderPrev(); refresh();
-}
-
-// 업로드 이미지를 PNG Blob으로 재인코딩(확장자/포맷 무관하게 thumb.png/prevNN.png 보장).
+// 업로드 이미지를 PNG Blob으로 재인코딩해 thumb.png와 자동 생성 미리보기의 포맷을 고정한다.
 function toPngBlob(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1404,7 +1382,7 @@ async function buildCharacterZipBlob(json, skinId) {
    구조 = 디자인레포 레이아웃 오버레이:
      character/zip/{skinId}.zip   ← 위 캐릭터 zip 그대로
      character/preview/{skinId}/thumb.png
-     character/preview/{skinId}/prev01.png …
+     character/preview/{skinId}/motion_{state}.{gif,png}
      catalog_entry.json           ← catalog.json "skins"에 병합할 항목
    Action(apply-skin-bundle)이 이 구조를 그대로 레포에 펼치고 catalog만 병합한다. */
 // 번들 blob 생성(검증 포함). 실패 시 null. makeZip(다운로드)·autoUpload(원클릭) 공용.
@@ -1421,10 +1399,6 @@ async function buildBundleBlob() {
   // 2) 미리보기 (PNG로 재인코딩)
   const prevDir = bundle.folder(`character/preview/${skinId}`);
   prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
-  for (let i = 0; i < previewFrames.length; i++) {
-    prevDir.file(`prev${pad2(i + 1)}.png`, await toPngBlob(previewFrames[i].file));
-  }
-
   // 상점 목록 카드용 '정지1' 원본 프레임(투명·캐릭터만, 타이머/흰배경 없음)을 stop.png로 발행한다.
   // motion_stop.png는 타이머 박스+흰 매트 합성본이라 상점 카드에선 흰 박스로 튄다 → 별도 깨끗한 스프라이트가 필요.
   if (store.stop?.frames?.[0]?.file) {
@@ -1609,21 +1583,20 @@ async function commitToInbox(filename, blob, message) {
 // 현재 폼 상태 전체 초기화(편집 로드 직전에 호출).
 function resetBuilderState() {
   STATES.forEach(s => {
-    store[s.key].frames.forEach(fr => URL.revokeObjectURL(fr.url));
+    releaseFrameUrls(store[s.key].frames);
     store[s.key].frames = []; store[s.key].pingpong = false; store[s.key].dur = s.defDur;
     const di = document.querySelector(`[data-dur="${s.key}"]`); if (di) di.value = s.defDur;
     const pi = document.querySelector(`[data-pingpong="${s.key}"]`); if (pi) pi.checked = false;
   });
   // 인터루드 초기화(프레임 + 주기·길이 입력칸).
-  store.interlude.frames.forEach(fr => URL.revokeObjectURL(fr.url));
+  releaseFrameUrls(store.interlude.frames);
   store.interlude.frames = []; store.interlude.pingpong = false; store.interlude.dur = ITL_DEF_DUR;
   { const di = document.querySelector('[data-dur="interlude"]'); if (di) di.value = ITL_DEF_DUR;
     const pi = document.querySelector('[data-pingpong="interlude"]'); if (pi) pi.checked = false;
     const em = $("itlEveryMin"); if (em) em.value = "";
     const ds = $("itlDurSec"); if (ds) ds.value = ""; }
-  Object.keys(assets).forEach(k => { if (assets[k].url) URL.revokeObjectURL(assets[k].url); delete assets[k]; });
-  if (previewThumb) { URL.revokeObjectURL(previewThumb.url); previewThumb = null; }
-  previewFrames.forEach(fr => URL.revokeObjectURL(fr.url)); previewFrames.length = 0;
+  clearAssetStore();
+  clearPreviewThumb();
 }
 
 // pingpong으로 펼쳐진 프레임 이름(fwd + reverse(fwd[1..-2]))이면 원본 forward로 되돌린다.
@@ -1646,7 +1619,7 @@ async function fileFromZip(zip, prefix, relName) {
   return new File([blob], relName, { type: blob.type || "application/octet-stream" });
 }
 
-// URL에서 File 가져오기(없으면 null). 미리보기 PNG 탐침용.
+// URL에서 File 가져오기(없으면 null). 대표 썸네일 복원용.
 async function fileFromUrl(url, name) {
   try {
     const res = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
@@ -1737,21 +1710,15 @@ async function loadSkinForEdit(entry) {
     $("fontSize").value = (font.sizeSp != null) ? font.sizeSp : "";
     $("fontFamily").value = font.family || "";
 
-    // 5) 미리보기(thumb + prevNN)
+    // 5) 대표 썸네일. 행동별 미리보기는 로드한 상태 프레임으로 다시 생성된다.
     const thumb = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/thumb.png`, "thumb.png");
     if (thumb) previewThumb = { file: thumb, url: URL.createObjectURL(thumb) };
-    for (let i = 1; i <= 30; i++) {
-      const pf = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/prev${pad2(i)}.png`, `prev${pad2(i)}.png`);
-      if (!pf) break; // 첫 결번에서 중단
-      previewFrames.push({ id: ++frameSeq, file: pf, url: URL.createObjectURL(pf) });
-    }
 
     // 6) UI 전체 다시 그리기
     STATES.forEach(s => renderFrames(s.key));
     renderFrames("interlude");
     Object.values(assetRenderers).forEach(r => r());
     if (thumbRender) thumbRender();
-    renderPrev();
     refresh();
     status.innerHTML = `✏️ <b>${entry.skinId}</b> 불러옴 — 수정 후 다시 zip을 만들어 업로드하면 갱신됩니다.`;
   } catch (e) {
@@ -1771,6 +1738,21 @@ let pendingDeleteIds = new Set();
 try { const raw = localStorage.getItem(PENDING_DELETE_KEY); if (raw) pendingDeleteIds = new Set(JSON.parse(raw)); } catch {}
 function savePendingDelete() {
   try { localStorage.setItem(PENDING_DELETE_KEY, JSON.stringify([...pendingDeleteIds])); } catch {}
+}
+
+function markDeletePending(skinId) {
+  pendingDeleteIds.add(skinId);
+  savePendingDelete();
+  renderReleased();
+}
+
+function reconcilePendingDeletes(catalogSkins) {
+  if (!pendingDeleteIds.size) return;
+  const catalogIds = new Set(catalogSkins.map(s => s.skinId));
+  const completedIds = [...pendingDeleteIds].filter(id => !catalogIds.has(id));
+  if (!completedIds.length) return;
+  completedIds.forEach(id => pendingDeleteIds.delete(id));
+  savePendingDelete();
 }
 
 // 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
@@ -1801,7 +1783,7 @@ async function makeDeleteMarker(entry = null) {
   if (inboxReady()) {
     const ok = await commitToInbox(`${id}.delete.json`, blob, `chore(skin): _inbox/${id}.delete.json (삭제 요청)`);
     if (ok) {
-      pendingDeleteIds.add(id); savePendingDelete(); renderReleased();
+      markDeletePending(id);
       $("status").innerHTML =
         `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다. (완료되면 ↻로 목록 갱신)`;
     }
@@ -1914,13 +1896,8 @@ async function loadReleased() {
     const data = await res.json();
     releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
     releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
-    // 삭제가 완료돼 카탈로그에서 사라진 항목은 pending에서 정리 → 회색 잠금 자동 해제(그때만 다시 삭제 가능).
-    if (pendingDeleteIds.size) {
-      const alive = new Set(releasedSkins.map(s => s.skinId));
-      let changed = false;
-      for (const pid of [...pendingDeleteIds]) if (!alive.has(pid)) { pendingDeleteIds.delete(pid); changed = true; }
-      if (changed) savePendingDelete();
-    }
+    // 카탈로그에서 사라진 항목은 삭제 완료로 간주해 회색 잠금을 해제한다.
+    reconcilePendingDeletes(releasedSkins);
     renderReleased();
     if ($("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
     updateDupHint();
@@ -2330,7 +2307,6 @@ buildAssetSlot("background", "타이머 배경", "image/*");
 BUTTONS.forEach(b => buildAssetSlot(b.key, b.label, "image/*"));
 buildAssetSlot("font", "숫자 폰트(.ttf)", ".ttf,font/ttf,application/octet-stream");
 buildThumbSlot();
-buildPrevList();
 
 // 현재 로컬 일시(yyyy-mm-ddThh:mm:ss). 창고 출시순 정렬이 같은 날 스킨도 초 단위로 구분하도록
 // 출시일(createdAt)에 시각까지 담는다. 사전식 비교가 곧 시간순이라 문자열 내림차순 정렬과 호환된다.

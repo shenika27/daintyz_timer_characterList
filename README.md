@@ -10,16 +10,7 @@
 > (예: "감자" → 감자 캐릭터 + 흙밭 배경 / "우주" → 우주인 + 우주 배경)
 >
 > **구매는 테마(세트) 단위**입니다. 단, 사용자는 앱에서 **캐릭터와 타이머를 따로 골라 섞어 적용**할 수 있습니다.
-> (예: 감자 캐릭터 + 우주 타이머). 그래서 테마마다 `character/preview/{id}/` 폴더에 **테마 썸네일 1장(`thumb.png`)·미리보기 N장(`prev01,02,…`)**을 함께 준비합니다.
-
----
-
-## 🗒 TODO (나중에 정리 — 지금 당장은 아님)
-
-- [ ] **빌더의 prevNN 미리보기 갤러리 업로드 제거 검토.**
-  앱 미리보기는 이제 행동별 파일(`character/preview/{id}/motion_{state}.{gif,png}`)과 대표 썸네일(`thumb.png`)만 표시하고, **`prevNN.png`는 앱에서 더 이상 읽지 않습니다.**
-  그런데 스킨빌더(`docs/index.html`)의 "미리보기 갤러리(prev01, prev02…)" 칸은 아직 살아 있어, 거기에 올리면 `buildBundleBlob`이 `character/preview/{id}/prevNN.png`를 CDN에 계속 업로드합니다(앱엔 안 보이는 **잉여 파일**).
-  → 빌더 UI의 해당 칸 + `buildBundleBlob`의 `prev${NN}.png` 생성 코드를 제거하면 CDN이 깔끔해짐. (현재는 무해)
+> (예: 감자 캐릭터 + 우주 타이머). 그래서 테마마다 `character/preview/{id}/` 폴더에 **대표 썸네일(`thumb.png`)과 행동별 미리보기(`motion_{state}.{gif,png}`)**를 함께 배포합니다.
 
 ---
 
@@ -35,19 +26,19 @@ catalog.json                    ← 앱이 읽는 테마 목록 (+ baseUrl)
 _retired_ids.json               ← 삭제된 skinId/productId 원장 (재사용 감지·차단용, PART 3 참고)
 character/                      ← 테마 에셋 묶음
   zip/{skinId}.zip              ← 테마 한 세트 (skin.json + 캐릭터·타이머 PNG들)
-  preview/{skinId}/thumb.png    ← 테마 썸네일 (상점 목록 + 앱 '타이머' 탭 공용)
-  preview/{skinId}/prev01.png   ← 미리보기 1장
-  preview/{skinId}/prev02.png … ← 미리보기 추가 (prev01,02,03… 가변 개수)
+  preview/{skinId}/thumb.png    ← 테마 썸네일 (상점·창고 목록 공용)
+  preview/{skinId}/stop.png     ← 상점 카드용 투명 정지 스프라이트
+  preview/{skinId}/motion_*.gif ← 상세화면 행동별 미리보기(1프레임 상태는 PNG)
 ```
 
-- 테마별 표시 에셋(썸네일·미리보기)은 **`character/preview/{skinId}/` 한 폴더에 모읍니다.** 썸네일 파일명은 `thumb.png` 고정, 미리보기는 `prevNN.png`를 등록한 개수만큼.
+- 테마별 표시 에셋은 **`character/preview/{skinId}/` 한 폴더에 모읍니다.** 빌더가 `thumb.png`, `stop.png`, `motion_{state}.{gif,png}`를 배치합니다.
 - zip 안 파일명/구조는 그대로(루트에 `skin.json` + PNG들). zip을 **`character/zip/` 폴더 아래**에 둡니다.
-- 썸네일·미리보기는 **zip 밖 독립 PNG** — 다운로드(구매) 전 상점 목록·상점 미리보기에서 바로 보여줘야 하므로 zip에 넣지 않습니다.
+- 표시 에셋은 **zip 밖 독립 파일**이라 다운로드 전에도 상점·창고·상세 화면에서 바로 볼 수 있습니다.
 
 **신규 테마 출시(권장) = 스킨빌더 로그인 → 내용 작성 → `자동 업로드`**면 끝입니다. 인증된 Worker가 번들을 `_inbox/`에 커밋하고, `character/zip/`·`character/preview/` 배치와 `catalog.json` 갱신은 GitHub Action이 자동 처리합니다(아래 **PART 3** 참고). zip을 내려받아 GitHub 웹에서 직접 올리는 수동 방식도 그대로 사용할 수 있습니다.
 반영 후 10~15분이면 jsDelivr CDN을 통해 앱 목록에 나타납니다.
 
-> ⚠️ `catalog.json`은 항상 최신이 필요해 앱이 **raw.githubusercontent**에서 받고, 무거운 에셋(zip/썸네일/미리보기)은
+> ⚠️ `catalog.json`은 항상 최신이 필요해 앱이 **raw.githubusercontent**에서 받고, 무거운 에셋(zip/썸네일/행동 미리보기)은
 > catalog의 `baseUrl`(jsDelivr CDN)에서 받습니다. jsDelivr는 `@main`을 ~12시간 캐싱하니 급하면 [purge.jsdelivr.net]으로 무효화하세요.
 
 ---
@@ -251,22 +242,21 @@ character/                      ← 테마 에셋 묶음
 > 어떤 그림을 그릴지는 디자인 자유고, **JSON에 어떤 파일을 연결할지는 개발자가 PART 2를 보고 설정**합니다.
 > 디자이너는 PNG와 "이건 배경/이건 재생버튼" 정도만 알려주면 됩니다.
 
-## 5. 썸네일 & 미리보기 (앱 목록·상점용) ★ 테마마다 필수
+## 5. 썸네일과 행동별 미리보기 (앱 목록·상점용) ★ 테마마다 필수
 
-앱 목록과 상점에 쓸 그림을 **테마 폴더 `character/preview/{skinId}/` 하나에** 모아 넣습니다. 썸네일 1장(고정) + 미리보기 N장. (zip 밖 독립 PNG)
+앱 목록과 상세화면에 쓸 파일은 **테마 폴더 `character/preview/{skinId}/` 하나에** 모입니다. 대표 썸네일은 직접 올리고, 나머지는 빌더가 상태 프레임에서 자동 생성합니다.
 
 | 파일 | 쓰이는 곳 | 무엇을 담나 | 권장 |
 |---|---|---|---|
-| `character/preview/{skinId}/thumb.png` | 상점 목록 + 앱 '타이머' 탭 썸네일 | 테마 대표 모습 (캐릭터+타이머 한 컷 권장) | 정사각 |
-| `character/preview/{skinId}/prev01.png` | 상점 미리보기(스와이프) 1번째 | 위젯 전체 모습 한 장 | 위젯 비율 |
-| `character/preview/{skinId}/prev02.png` | 상점 미리보기(스와이프) 2번째 | 위젯 전체 모습 한 장 | 위젯 비율 |
-| `character/preview/{skinId}/prev03.png` … | 상점 미리보기(스와이프) N번째 (선택) | 추가로 보여줄 컷 | 위젯 비율 |
+| `character/preview/{skinId}/thumb.png` | 상점·창고 목록 | 테마 대표 모습 | 정사각 |
+| `character/preview/{skinId}/stop.png` | 상점 카드 | 정지 첫 프레임의 투명 캐릭터 | 빌더 자동 생성 |
+| `character/preview/{skinId}/motion_stop.png` | 상세 미리보기 | 정지 상태 위젯 합성본 | 빌더 자동 생성 |
+| `character/preview/{skinId}/motion_running.gif` 등 | 상세 미리보기 캐러셀 | 진행·중단·완료·인터루드 합성본 | 빌더 자동 생성 |
 
-- **썸네일 파일명은 `thumb.png` 고정**, 미리보기는 `prev01.png`부터 **빈 번호 없이 연속**으로(prev01, prev02, prev03 …). 등록한 개수만큼 상점 미리보기 화면이 **가로 스와이프 갤러리**로 보여줍니다(앱이 prev01부터 순서대로 찾다가 없는 번호에서 멈춤).
-- 미리보기는 캐릭터+타이머가 합쳐진 **위젯 전체 모습**을 보여주면 좋습니다(사용자가 "이 테마 사면 이렇게 보이는구나"를 보는 화면). 정지/진행중 등 상황별 컷을 원하는 만큼 넣으면 됩니다.
-- ℹ️ **prevNN은 "구매 전" 상점 미리보기 전용입니다.** 구매(다운로드) 후 앱의 **적용 미리보기 화면은 앱이 zip 에셋으로 직접 라이브 렌더**하므로(상태 탭으로 정지/진행/일시정지/완료 표시), 적용 미리보기를 위해 상태별 컷을 따로 그릴 필요는 없습니다.
-- 앱 '캐릭터' 탭은 zip 안의 로컬 캐릭터 프레임을 직접 쓰므로 별도 원격 썸네일이 필요 없습니다.
-- 썸네일/미리보기가 없으면 앱은 기본 플레이스홀더로 대체하지만, **상점 매력도가 크게 떨어지니 테마마다 썸네일 1 + 미리보기 최소 1장 이상 준비**를 권장합니다.
+- **썸네일 파일명은 `thumb.png` 고정**입니다.
+- 상태가 한 프레임이면 `motion_{state}.png`, 두 프레임 이상이면 `motion_{state}.gif`로 생성됩니다.
+- 앱은 `stop`, `running`, `pause`, `complete`, `interlude` 순서로 존재하는 미리보기를 표시합니다.
+- 미리보기 파일이 하나도 없으면 보유 테마는 인터랙티브 위젯, 미보유 테마는 대표 썸네일로 폴백합니다.
 
 ## 6. 파일명 규칙
 
@@ -290,10 +280,9 @@ character/                      ← 테마 에셋 묶음
 - [ ] (테마 폰트 쓰면) `.ttf` 파일 1개 — 개발자가 `font.file`로 연결
 - [ ] 어두운 배경이면 숫자 글자색을 밝게 지정하도록 개발자에게 전달
 
-**썸네일 & 미리보기 (`character/preview/{skinId}/` 폴더에 모음)**
+**썸네일과 자동 미리보기 (`character/preview/{skinId}/` 폴더에 모음)**
 - [ ] `character/preview/{skinId}/thumb.png` (테마 썸네일 — 상점/타이머 탭 공용, 파일명 고정)
-- [ ] `character/preview/{skinId}/prev01.png` (미리보기 1번째)
-- [ ] `character/preview/{skinId}/prev02.png` … (미리보기 추가, 필요한 만큼 prev03, prev04 …)
+- [ ] 빌더가 생성한 `stop.png`, `motion_{state}.{gif,png}`가 번들에 포함되는지 확인
 
 **공통**
 - [ ] 파일명 규칙 준수
@@ -563,11 +552,12 @@ character/zip/newchar.zip
 └── font.ttf                  (테마 숫자 폰트, 선택 — font.file로 연결)
 ```
 
-### 2. 썸네일·미리보기 배치 (PART 1-5 참고)
+### 2. 썸네일·행동별 미리보기 배치 (PART 1-5 참고)
 ```
 character/preview/newchar/thumb.png    (테마 썸네일, 파일명 고정)
-character/preview/newchar/prev01.png   (미리보기 1)
-character/preview/newchar/prev02.png   (미리보기 2, 필요시 prev03 …)
+character/preview/newchar/stop.png     (상점 카드용 정지 스프라이트)
+character/preview/newchar/motion_stop.png
+character/preview/newchar/motion_running.gif
 ```
 
 ### 3. catalog.json에 항목 추가
@@ -595,7 +585,7 @@ character/preview/newchar/prev02.png   (미리보기 2, 필요시 prev03 …)
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `baseUrl` | string | ❌ | 에셋(zip/썸네일/미리보기)을 받을 jsDelivr CDN 루트. 생략 시 catalog.json이 있는 폴더로 폴백 (최상위 1개) |
+| `baseUrl` | string | ❌ | 에셋(zip/썸네일/행동 미리보기)을 받을 jsDelivr CDN 루트. 생략 시 catalog.json이 있는 폴더로 폴백 (최상위 1개) |
 | `lifetimePassGiftCodes` | array | ❌ | 평생이용권 기프트코드 해시 목록. 각 항목은 `{hash, expiresAt, maxUses?}`. 스킨빌더 마커로 병합 권장 |
 | `skinId` | string | ✅ | skin.json의 `skinId`와 동일. 이걸로 아래 경로를 자동 유추 |
 | `name` | string | ✅ | 앱 목록 표시 이름 |
@@ -611,9 +601,9 @@ character/preview/newchar/prev02.png   (미리보기 2, 필요시 prev03 …)
 | `createdAt` | string | ❌ | 출시일 `"yyyy-MM-dd"`. 상점 NEW 배지 판정(출시일+7일 이내). 생략 시 NEW 안 뜸 |
 | `version` | number | ❌ | 테마 버전(사람이 보는 체인지로그용 — 앱 동작엔 미사용). 스킨빌더 자동배치 시 재업로드면 +1 됨 |
 
-> **자동 유추 경로** (`{baseUrl}/` 기준): `character/zip/{skinId}.zip`, `character/preview/{skinId}/thumb.png`,
-> `character/preview/{skinId}/prev01.png`, `prev02.png` …(가변).
+> **자동 유추 경로** (`{baseUrl}/` 기준): `character/zip/{skinId}.zip`, `character/preview/{skinId}/thumb.png`.
+> 행동별 미리보기는 같은 폴더의 `motion_{state}.{gif,png}`를 앱이 자동 탐침합니다.
 > 특수한 경우만 catalog 항목에 `zipUrl`/`thumbnailUrl`로 개별 덮어쓸 수 있습니다(이 둘만 오버라이드 지원).
 
 ### 4. git push
-`character/zip/` + 썸네일/미리보기 + `catalog.json` 커밋 후 push → **10~15분 후** CDN 반영 → 앱 목록에 표시.
+`character/zip/` + 썸네일/행동 미리보기 + `catalog.json` 커밋 후 push → **10~15분 후** CDN 반영 → 앱 목록에 표시.

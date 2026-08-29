@@ -2,7 +2,7 @@
 //
 // 번들 구조(스킨빌더 = 이 레포 최상위 index.html 출력):
 //   character/zip/{skinId}.zip
-//   character/preview/{skinId}/thumb.png, prev01.png …
+//   character/preview/{skinId}/thumb.png, stop.png, motion_{state}.{gif,png}
 //   catalog_entry.json   ← catalog.json "skins"에 upsert 할 항목
 //
 // 동작: 번들을 레포 레이아웃 그대로 펼치고(character/ 하위 zip·preview), catalog만 병합.
@@ -128,8 +128,11 @@ for (const zip of zips) {
     throw new Error(`${zip}: catalog_entry.json 이 없습니다. 스킨빌더로 만든 번들인지 확인하세요.`);
   }
   const entry = JSON.parse(fs.readFileSync(entryPath, "utf8"));
-  if (!entry.skinId) throw new Error(`${zip}: catalog_entry.json 에 skinId가 없습니다.`);
-  const skinId = entry.skinId;
+  const skinId = String(entry.skinId || "").trim();
+  if (!/^[A-Za-z0-9_]+$/.test(skinId)) {
+    throw new Error(`${zip}: catalog_entry.json 의 skinId 형식이 올바르지 않습니다(영문/숫자/_).`);
+  }
+  entry.skinId = skinId;
   const paid = isPaidEntry(entry);
   if (paid && !entry.productId) {
     // 빌더가 유료엔 productId를 반드시 넣는다. 없으면 손상된 번들 → 멈춤(보호 깨짐 방지).
@@ -140,6 +143,8 @@ for (const zip of zips) {
   const previewSrc = path.join(tmp, "character", "preview", skinId);
   if (fs.existsSync(previewSrc)) {
     const previewDst = path.join(ROOT, "character", "preview", skinId);
+    // 새 번들을 디렉터리 단위로 교체해 제거된 motion/과거 prevNN 파일이 CDN에 남지 않게 한다.
+    fs.rmSync(previewDst, { recursive: true, force: true });
     fs.cpSync(previewSrc, previewDst, { recursive: true });
     log(`  → character/preview/${skinId} 배치`);
   } else {
