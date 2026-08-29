@@ -1,16 +1,29 @@
 // _play_upsert.json / _play_delete.txt (apply-skin-bundle.mjs 산출물)을 읽어
 // Google Play 인앱상품(SKU)을 자동 등록/수정/비활성화한다.
 //
+// ★ 2024+ 신 모델: 레거시 `inappproducts` API 는 이 앱에서 403
+//   "Please migrate to the new publishing API" 로 거부된다. 그래서 이 스크립트는
+//   **`monetization.onetimeproducts`**(신 퍼블리싱 API)를 쓴다.
+//   - upsert:   POST oneTimeProducts:batchUpdate (allowMissing=true → 없으면 생성)
+//   - 존재확인: GET  oneTimeProducts/{productId} (404=미존재)
+//   - 가격환산: POST pricing:convertRegionPrices (옛 autoConvertMissingPrices 재현)
+//   - 상태변경: POST oneTimeProducts/{id}/purchaseOptions:batchUpdateStates (활성/비활성)
+//
+// 앱 클라이언트는 Play Billing Library 7(=레거시 조회, queryProductDetails INAPP)이라,
+//   상품의 구매옵션을 반드시 **buyOption.legacyCompatible=true** 로 만들어야
+//   앱이 상품을 조회·구매할 수 있다(신 모델 상품을 옛 클라이언트에 노출하는 유일한 방법).
+//
 // 흐름(워크플로우): 번들 배치 → catalog 병합 → R2 업로드 → [이 스크립트] → catalog 커밋.
 //   유료 스킨이 새로 올라오면 Play Console에 SKU(skin_{skinid})를 만들어 둬야
 //   앱 상점의 구매 버튼이 실제 상품을 가리킨다 → 그래서 커밋 '전에' 동기화한다.
 //
 // 설계 결정:
-//   - 신규 상품은 status=inactive 로 만든다(가격 오타가 곧바로 실판매로 이어지는 사고 방지).
-//     안정화되면 Play Console에서 '활성'만 누르면 판매 시작.
-//   - 이미 존재하는 상품은 기존 status를 보존한다(활성 상품을 비활성으로 되돌리지 않음).
-//     → 가격/이름만 갱신. "안정화되면 즉시판매로 쉽게 돌리는" 구조를 깨지 않는다.
-//   - 삭제된 유료 스킨은 하드 삭제 대신 status=inactive 로 내린다(구매 이력 보존).
+//   - 신규 상품의 구매옵션은 생성 직후 **DRAFT**(=한 번도 노출된 적 없음)로 만들어진다.
+//     이는 옛 모델의 status=inactive 보다 안전하다(가격 오타가 곧바로 실판매로 이어지지 않음).
+//     PLAY_PRODUCT_STATUS=active 로 실행하거나 Play Console에서 활성화하면 판매가 시작된다.
+//   - 이미 존재하는 상품은 구매옵션 state 를 건드리지 않는다(활성 상품을 되돌리지 않음).
+//     → 가격/이름(리스팅)만 갱신. state 는 서버 관리(Output only)라 patch 로 바뀌지 않는다.
+//   - 삭제된 유료 스킨은 하드 삭제 대신 구매옵션을 INACTIVE 로 내린다(구매 이력 보존).
 //
 // 인증: 결제 Worker와 동일한 서비스계정 JWT → OAuth2(androidpublisher 스코프).
 //   Node 20 전역 Web Crypto/atob/btoa 사용 → 외부 의존성 0.
@@ -20,8 +33,9 @@
 //        - 처리할 유료 변경이 있으면 명확히 실패(커밋 차단 → 깨진 상태 방지)
 //        - 유료 변경이 없으면 조용히 통과(무료 전용 파이프라인은 토큰 없이도 동작)
 //   ANDROID_PACKAGE_NAME         앱 패키지명(예: com.daintyz.timerwidget)
-//   PLAY_PRODUCT_STATUS          신규 상품 초기 상태("inactive" 기본 | "active")
+//   PLAY_PRODUCT_STATUS          신규 구매옵션 초기 상태("inactive" 기본=DRAFT 유지 | "active"=자동 활성)
 //   PLAY_PRICE_CURRENCY          기준 통화(기본 "KRW")
+//   ALLOW_PRODUCT_ID_REUSE       "1"이면 productId 재사용 차단(방법3)을 강행 해제
 
 import fs from "node:fs";
 import path from "node:path";
@@ -37,6 +51,13 @@ const CURRENCY = process.env.PLAY_PRICE_CURRENCY || "KRW";
 // 방법3: 신규 스킨이 '이미 존재하는' productId를 재사용하면 기본 차단(과거 구매 이력 누수 방지).
 // 정당한 재시도(예: 상품은 만들어졌는데 catalog 커밋이 실패한 경우) 등에서만 =1로 강행 허용.
 const ALLOW_REUSE = String(process.env.ALLOW_PRODUCT_ID_REUSE || "").trim() === "1";
+
+// 구매옵션 ID(신 모델 필수, 상품 내 유일·immutable). 이 스크립트가 만든 상품은 항상 이 값 하나.
+// 기존 상품 갱신 시엔 서버가 준 실제 purchaseOptionId를 우선 사용한다(콘솔서 만든 경우 대비).
+const DEFAULT_PURCHASE_OPTION_ID = "buy";
+// regionsVersion 폴백. 보통은 convertRegionPrices 응답의 regionVersion을 그대로 쓴다(하드코딩 안 함).
+// 참조: https://support.google.com/googleplay/android-developer/answer/10532353
+const REGIONS_VERSION_FALLBACK = { version: "2022/02" };
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3";
@@ -107,11 +128,14 @@ async function getAccessToken(sa) {
   return data.access_token;
 }
 
-// ── androidpublisher inappproducts ──────────────────────────────────────────
-function ipUrl(sku, query = "") {
-  const base = `${API}/applications/${encodeURIComponent(PKG)}/inappproducts`;
-  return sku ? `${base}/${encodeURIComponent(sku)}${query}` : `${base}${query}`;
-}
+// ── androidpublisher monetization.onetimeproducts ───────────────────────────
+const APP = `${API}/applications/${encodeURIComponent(PKG)}`;
+// 경로 케이싱은 discovery 문서 기준(주의: get/batch 계열은 camelCase `oneTimeProducts`).
+const otpUrl = (productId) => `${APP}/oneTimeProducts/${encodeURIComponent(productId)}`;
+const otpBatchUpdateUrl = () => `${APP}/oneTimeProducts:batchUpdate`;
+const optStatesUrl = (productId) => `${APP}/oneTimeProducts/${encodeURIComponent(productId)}/purchaseOptions:batchUpdateStates`;
+const convertPricesUrl = () => `${APP}/pricing:convertRegionPrices`;
+
 async function apiFetch(token, url, method, body) {
   const res = await fetch(url, {
     method,
@@ -124,22 +148,82 @@ async function apiFetch(token, url, method, body) {
   return { ok: res.ok, status: res.status, json };
 }
 
-/** 인앱상품 리소스 본문. 기존(prev) 있으면 status 보존, 없으면 NEW_STATUS. */
-function buildProduct(item, prev) {
-  const priceMicros = String(Math.round(Number(item.price) * 1_000_000));
+/** 소수 통화금액 → Money(units 문자열, nanos). KRW 700 → {KRW,"700",0}. */
+function money(amount, currencyCode) {
+  const n = Number(amount) || 0;
+  const units = Math.trunc(n);
+  const nanos = Math.round((n - units) * 1e9);
+  return { currencyCode, units: String(units), nanos };
+}
+
+/** 기준가(tax exclusive)를 전지역 가격으로 환산한다(옛 autoConvertMissingPrices 대체).
+ *  반환: { configs:[{regionCode,price,availability}], newRegionsConfig, regionsVersion } */
+async function convertRegionPrices(token, price) {
+  const r = await apiFetch(token, convertPricesUrl(), "POST", { price: money(price, CURRENCY) });
+  if (!r.ok) throw new Error(`convertRegionPrices 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
+  const map = r.json.convertedRegionPrices || {};
+  const configs = Object.values(map).map((c) => ({
+    regionCode: c.regionCode,
+    price: c.price,               // 환산가(tax inclusive) — 신 모델 config 가격으로 그대로 사용
+    availability: "AVAILABLE",
+  }));
+  const other = r.json.convertedOtherRegionsPrice || {};
+  const newRegionsConfig = (other.usdPrice && other.eurPrice)
+    ? { usdPrice: other.usdPrice, eurPrice: other.eurPrice, availability: "AVAILABLE" }
+    : undefined;
+  const regionsVersion = r.json.regionVersion || REGIONS_VERSION_FALLBACK;
+  return { configs, newRegionsConfig, regionsVersion };
+}
+
+/** OneTimeProduct 리소스 본문. 구매옵션 하나(legacyCompatible)로 PBL7 앱이 조회·구매 가능하게 만든다.
+ *  state 는 Output-only 라 여기서 설정하지 않는다(활성/비활성은 별도 batchUpdateStates). */
+function buildProduct(item, pricing, purchaseOptionId) {
   const title = String(item.name || item.skinId).slice(0, 55);
   const enTitle = String(item.localized?.en?.name || "").trim().slice(0, 55);
-  const listings = { "ko-KR": { title, description: title } };
-  if (enTitle) listings["en-US"] = { title: enTitle, description: enTitle };
+  const listings = [{ languageCode: "ko-KR", title, description: title }];
+  if (enTitle) listings.push({ languageCode: "en-US", title: enTitle, description: enTitle });
+  const purchaseOption = {
+    purchaseOptionId,
+    buyOption: { legacyCompatible: true }, // ← PBL7 레거시 조회 호환(필수)
+    regionalPricingAndAvailabilityConfigs: pricing.configs,
+  };
+  if (pricing.newRegionsConfig) purchaseOption.newRegionsConfig = pricing.newRegionsConfig;
   return {
     packageName: PKG,
-    sku: item.productId,
-    status: prev?.status || NEW_STATUS,
-    purchaseType: "managedUser", // 1회 구매 비소비성(스킨 영구 보유)
-    defaultLanguage: prev?.defaultLanguage || "ko-KR",
-    defaultPrice: { priceMicros, currency: CURRENCY },
+    productId: item.productId,
     listings,
+    purchaseOptions: [purchaseOption],
   };
+}
+
+/** 상품 하나를 upsert(없으면 생성). 반환: 서버가 준 OneTimeProduct. */
+async function upsertProduct(token, product, regionsVersion) {
+  const body = {
+    requests: [{
+      oneTimeProduct: product,
+      updateMask: "listings,purchaseOptions",
+      allowMissing: true, // 없으면 생성(create 시 updateMask 는 무시됨)
+      regionsVersion,
+    }],
+  };
+  const r = await apiFetch(token, otpBatchUpdateUrl(), "POST", body);
+  if (!r.ok) throw new Error(`batchUpdate 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
+  return (r.json.oneTimeProducts || [])[0];
+}
+
+/** 구매옵션 상태 변경(activate/deactivate). action="activate"|"deactivate". */
+async function setPurchaseOptionState(token, productId, purchaseOptionId, action) {
+  const key = action === "activate" ? "activatePurchaseOptionRequest" : "deactivatePurchaseOptionRequest";
+  const body = { requests: [{ [key]: { packageName: PKG, productId, purchaseOptionId } }] };
+  const r = await apiFetch(token, optStatesUrl(productId), "POST", body);
+  if (!r.ok) throw new Error(`purchaseOptions:batchUpdateStates(${action}) 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
+  return r.json;
+}
+
+/** 기존 상품에서 첫 구매옵션 id를 얻는다(없으면 기본값). */
+function existingPurchaseOptionId(existing) {
+  const opts = existing?.purchaseOptions;
+  return (Array.isArray(opts) && opts[0]?.purchaseOptionId) || DEFAULT_PURCHASE_OPTION_ID;
 }
 
 const SA = (() => {
@@ -151,45 +235,70 @@ const token = await getAccessToken(SA);
 let created = 0, updated = 0, deactivated = 0, skipped = 0;
 const errors = [];
 
-// 등록/수정: GET → 없으면 insert, 있으면 status 보존하여 update.
+// 등록/수정: GET → 없으면 생성(구매옵션 DRAFT), 있으면 리스팅·가격만 갱신(state 보존).
 for (const item of upserts) {
-  const sku = item.productId;
-  if (!sku) { errors.push("productId 없는 upsert 항목"); continue; }
-  const got = await apiFetch(token, ipUrl(sku), "GET");
-  if (got.status === 404) {
-    const body = buildProduct(item, null);
-    const r = await apiFetch(token, ipUrl(null, "?autoConvertMissingPrices=true"), "POST", body);
-    if (r.ok) { created++; log(`등록: ${sku} (${item.price}${CURRENCY}, status=${body.status})`); }
-    else errors.push(`insert ${sku} 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
-  } else if (got.ok) {
+  const productId = item.productId;
+  if (!productId) { errors.push("productId 없는 upsert 항목"); continue; }
+  try {
+    const got = await apiFetch(token, otpUrl(productId), "GET");
+    const exists = got.ok;
+    if (!exists && got.status !== 404) {
+      errors.push(`get ${productId} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`);
+      continue;
+    }
+
     // 방법3: 새 스킨(catalog에 처음 등장)이 이미 존재하는 productId를 재사용하려는 경우 차단.
     //   기존 상품엔 과거 구매 이력이 남아 있어, 그대로 갱신하면 옛 구매자가 새 스킨을 무료로 언락한다.
     //   같은 스킨의 수정/재업로드는 isNew=false 라 여기 안 걸린다(정상 수정 경로로 진행).
-    if (item.isNew && !ALLOW_REUSE) {
-      errors.push(`productId 재사용 차단: '${sku}' 는 이미 Play에 존재합니다(과거 구매 이력 가능). ` +
+    if (exists && item.isNew && !ALLOW_REUSE) {
+      errors.push(`productId 재사용 차단: '${productId}' 는 이미 Play에 존재합니다(과거 구매 이력 가능). ` +
         `새 스킨 '${item.skinId}' 에는 새 productId를 쓰세요. ` +
         `정당한 재시도로 강행하려면 워크플로 env ALLOW_PRODUCT_ID_REUSE=1 로 실행하세요.`);
       continue;
     }
-    const body = buildProduct(item, got.json);
-    const r = await apiFetch(token, ipUrl(sku, "?autoConvertMissingPrices=true"), "PUT", body);
-    if (r.ok) { updated++; log(`수정: ${sku} (${item.price}${CURRENCY}, status 유지=${body.status})`); }
-    else errors.push(`update ${sku} 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
-  } else {
-    errors.push(`get ${sku} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`);
+
+    const pricing = await convertRegionPrices(token, item.price);
+    const purchaseOptionId = exists ? existingPurchaseOptionId(got.json) : DEFAULT_PURCHASE_OPTION_ID;
+    const product = buildProduct(item, pricing, purchaseOptionId);
+    await upsertProduct(token, product, pricing.regionsVersion);
+
+    if (!exists) {
+      // 신규: 구매옵션은 DRAFT 로 생성됨. 기본은 그대로 두고(수동 활성),
+      //       PLAY_PRODUCT_STATUS=active 면 즉시 활성화한다.
+      if (NEW_STATUS === "active") {
+        await setPurchaseOptionState(token, productId, purchaseOptionId, "activate");
+        log(`등록+활성: ${productId} (${item.price}${CURRENCY})`);
+      } else {
+        log(`등록(DRAFT): ${productId} (${item.price}${CURRENCY}) — 활성화는 콘솔/PLAY_PRODUCT_STATUS=active`);
+      }
+      created++;
+    } else {
+      // 기존: state 는 건드리지 않음(활성 상품 유지). 가격·리스팅만 갱신됨.
+      updated++;
+      log(`수정: ${productId} (${item.price}${CURRENCY}, state 보존)`);
+    }
+  } catch (e) {
+    errors.push(String(e.message || e));
   }
 }
 
-// 삭제된 유료 스킨: 하드삭제 대신 비활성화(구매 이력 보존).
-for (const sku of deletes) {
-  const got = await apiFetch(token, ipUrl(sku), "GET");
-  if (got.status === 404) { skipped++; log(`비활성화 대상 없음(이미 삭제됨): ${sku}`); continue; }
-  if (!got.ok) { errors.push(`get(삭제용) ${sku} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`); continue; }
-  if (got.json.status === "inactive") { skipped++; log(`이미 비활성: ${sku}`); continue; }
-  const body = { ...got.json, status: "inactive" };
-  const r = await apiFetch(token, ipUrl(sku), "PUT", body);
-  if (r.ok) { deactivated++; log(`비활성화: ${sku}`); }
-  else errors.push(`deactivate ${sku} 실패(HTTP ${r.status}): ${JSON.stringify(r.json)}`);
+// 삭제된 유료 스킨: 하드삭제 대신 구매옵션 비활성화(구매 이력 보존).
+for (const productId of deletes) {
+  try {
+    const got = await apiFetch(token, otpUrl(productId), "GET");
+    if (got.status === 404) { skipped++; log(`비활성화 대상 없음(이미 삭제됨): ${productId}`); continue; }
+    if (!got.ok) { errors.push(`get(삭제용) ${productId} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`); continue; }
+    const opts = Array.isArray(got.json.purchaseOptions) ? got.json.purchaseOptions : [];
+    const live = opts.filter(o => o.state !== "INACTIVE" && o.state !== "INACTIVE_PUBLISHED");
+    if (live.length === 0) { skipped++; log(`이미 비활성: ${productId}`); continue; }
+    for (const o of live) {
+      await setPurchaseOptionState(token, productId, o.purchaseOptionId, "deactivate");
+    }
+    deactivated++;
+    log(`비활성화: ${productId} (구매옵션 ${live.length}개)`);
+  } catch (e) {
+    errors.push(String(e.message || e));
+  }
 }
 
 log(`완료: 등록 ${created}, 수정 ${updated}, 비활성화 ${deactivated}, 건너뜀 ${skipped}.`);
