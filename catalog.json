@@ -16,15 +16,9 @@
         }
       },
       "createdAt": "2026-08-29T22:10:19",
-      "version": 1
-    },
-    {
-      "skinId": "spc04",
-      "name": "spc04",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-08-30T13:38:18",
-      "version": 1
+      "version": 1,
+      "hidden": true,
+      "archived": true
     },
     {
       "skinId": "spc05",

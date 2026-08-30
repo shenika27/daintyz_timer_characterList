@@ -58,6 +58,10 @@
       "skinId": "sikpanc02",
       "productId": "skin_sikpanc02",
       "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "spc04",
+      "retiredAt": "2026-08-30"
     }
   ]
 }
