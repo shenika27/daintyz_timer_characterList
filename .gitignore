@@ -7,6 +7,8 @@ _r2_delete.txt
 # 워크플로우 Play 스텝이 읽어 SKU를 등록/수정/비활성화한 뒤 커밋에서는 제외된다.
 _play_upsert.json
 _play_delete.txt
+_play_delete_results.json
+_pending_paid_deletes.json
 
 # 번들 풀기용 임시 작업 폴더(실행 중 생성·삭제, 크래시 시 잔류 가능).
 _inbox_work/

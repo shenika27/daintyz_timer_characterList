@@ -22,6 +22,7 @@ _inbox/                         ← 빌더가 올린 번들/마커 처리함 (Ac
 .github/workflows/skin-deploy.yml ← _inbox 번들 자동 배치 워크플로
 scripts/apply-skin-bundle.mjs   ← 번들 풀기 + catalog 병합 스크립트
 scripts/sync-play-products.mjs  ← 유료 스킨 Play 인앱상품(SKU) 등록/수정/비활성화 (PART 3)
+scripts/finalize-skin-deletions.mjs ← Play 판매 이력 판정 뒤 유료 삭제/보관 확정
 catalog.json                    ← 앱이 읽는 테마 목록 (+ baseUrl)
 _retired_ids.json               ← 삭제된 skinId/productId 원장 (재사용 감지·차단용, PART 3 참고)
 character/                      ← 테마 에셋 묶음
@@ -453,7 +454,8 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 
 > 업로드하면 GitHub Action(`.github/workflows/skin-deploy.yml`)이 자동으로:
 > 번들을 풀어 `character/preview/{id}/`와 무료 `character/zip/{id}.zip` 배치 + `catalog.json`에 항목 upsert(기존이면 version +1)
-> + (유료면) 공개 zip을 남기지 않고 비공개 R2로 업로드 + **Play 인앱상품(SKU) 자동 등록** + 올린 inbox zip 삭제 후 커밋.
+> + (유료면) 공개 zip을 남기지 않고 비공개 R2의 현재 키와 버전 보관 키에 업로드
+> + **Play 인앱상품(SKU) 자동 등록** + 올린 inbox zip 삭제 후 커밋.
 > 즉 아래 "수동 절차"를 사람이 안 해도 됩니다. catalog 항목·파일명·폴더 규칙이 빌더에서 자동으로 맞춰집니다.
 
 ### 스킨빌더 로그인·인증 운영
@@ -479,17 +481,19 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 스킨빌더 오른쪽의 **출시된 스킨** 목록은 `catalog.json`과 기존 zip/preview를 불러와 수정용 폼으로 복원합니다. 무료 zip은 공개 GitHub에서, 유료 zip은 로그인 세션을 확인한 빌더 Worker가 비공개 R2에서 가져옵니다.
 
 - 기존 테마를 고른 뒤 수정해서 자동 업로드하면 같은 `skinId` 항목이 갱신되고 `version`이 올라갑니다.
-- 목록의 삭제 버튼으로 확인하면 `{skinId}.delete.json` 삭제 마커가 자동 업로드됩니다. 수동 방식을 선택한 경우에만 마커 파일을 `_inbox`에 직접 올립니다. 처리되면
-  `character/zip/{skinId}.zip`, `character/preview/{skinId}/`, `catalog.json` 항목이 정리됩니다.
-- 삭제 마커에 `productId`가 있으면 catalog 항목이 이미 사라진 상태에서도 Play 상품을 정리합니다. 구매옵션이 모두 `DRAFT`인 미판매 상품은 하드삭제하고, 활성화 또는 판매 이력이 있는 상품은 구매 이력을 보존하도록 비활성화만 합니다.
+- 목록의 삭제 버튼으로 확인하면 `{skinId}.delete.json` 삭제 마커가 자동 업로드됩니다. 수동 방식을 선택한 경우에만 마커 파일을 `_inbox`에 직접 올립니다.
+- 무료 테마와 구매옵션이 모두 `DRAFT`인 미판매 유료 상품은 catalog·preview·현재 R2 zip과 모든 버전 보관 zip에서 완전 삭제합니다.
+- 활성화 또는 판매 이력이 있는 유료 상품은 Play 구매옵션만 비활성화하고, 기존 구매자의 재다운로드를 위해
+  catalog 항목을 `hidden: true`, `archived: true`로 남기며 preview와 R2 원본도 보존합니다. 이 판정이 끝나기
+  전에는 catalog/R2를 먼저 삭제하지 않습니다.
 
 ### 삭제된 id 원장 (`_retired_ids.json`) — skinId/productId 재사용 차단 ★
 
 삭제된 `skinId`/`productId`를 다시 쓰면 **옛 보유자·구매자에게 새 스킨이 잘못 풀리는 사고**가 날 수 있어,
 워크플로우가 삭제 이력을 원장에 남겨 재사용을 감지·차단합니다(`scripts/apply-skin-bundle.mjs`, `scripts/sync-play-products.mjs`).
 
-- **적립**: 스킨을 삭제(`.delete.json`)하면 `_retired_ids.json`의 `retired[]`에 `{skinId, productId?, retiredAt}`가
-  쌓입니다. **무료·유료 모두** 기록합니다(이 원장은 커밋 대상 — 재실행/이력 추적용).
+- **적립**: 완전 삭제된 스킨은 `_retired_ids.json`의 `retired[]`에 `{skinId, productId?, retiredAt}`가
+  쌓입니다. 판매 이력 보관 상품은 catalog의 `archived` 항목 자체로 ID 재사용을 차단합니다.
 - **skinId 재사용 감지**: 삭제된 적 있는 `skinId`가 다시 올라오면 Actions 로그에 **경고**가 찍힙니다(차단은 아님).
   옛 스킨을 보유했던 사용자 화면에 새 스킨이 잘못 '보유'로 뜰 수 있어 새 id 사용을 권장합니다.
 - **productId 재사용 하드 차단**: catalog에 **처음 등장하는 스킨(`isNew`)** 이 **이미 Play에 존재하는 `productId`** 를
@@ -506,7 +510,8 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 - **신규 상품은 `비활성(inactive)`으로 생성**됩니다 — 가격 오타가 곧바로 실판매로 이어지지 않게.
   Play Console에서 상품을 확인하고 **`활성`만 누르면** 판매가 시작됩니다.
 - **이미 있는 상품은 기존 상태를 보존**합니다(활성 상품을 비활성으로 되돌리지 않음). 가격·이름만 갱신.
-- 빌더에서 스킨을 삭제하면 구매옵션이 모두 `DRAFT`인 미판매 SKU만 하드삭제합니다. 활성화 또는 판매 이력이 있는 SKU는 구매 이력 보존을 위해 비활성화만 합니다.
+- 빌더에서 스킨을 삭제하면 구매옵션이 모두 `DRAFT`인 미판매 SKU만 하드삭제합니다. 활성화 또는 판매 이력이
+  있는 SKU는 구매 이력 보존을 위해 비활성화하고, catalog/R2 원본을 보관해 개별 구매자의 재다운로드를 유지합니다.
 - 무료 전용 업로드면 이 단계는 통째로 건너뜁니다(토큰 없이도 무료 파이프라인 정상 동작).
 - 처음 등장하는 스킨이 **이미 존재하는 `productId`를 재사용하면 기본 차단**됩니다(위 [삭제된 id 원장](#삭제된-id-원장-_retired_idsjson--skinidproductid-재사용-차단-) 참고).
 
@@ -542,6 +547,7 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 ### 1. zip으로 묶기 → 무료는 공개 배치, 유료는 자동 파이프라인 사용
 zip 안은 그대로(루트에 `skin.json` + PNG들)입니다. 무료 테마만 `character/zip/{skinId}.zip` 위치에 직접 둘 수 있습니다.
 유료 테마는 공개 저장소에 원본이 남지 않도록 반드시 `_inbox` 자동 파이프라인으로 올려 R2에 배치합니다.
+파이프라인은 앱 다운로드용 `{skinId}.zip`과 롤백용 `versions/{skinId}/v{version}.zip`을 함께 저장합니다.
 ```
 character/zip/newchar.zip
 ├── skin.json
@@ -593,14 +599,15 @@ character/preview/newchar/motion_running.gif
 | `price` | number | ❌ | 가격(원). **0 또는 생략 = 무료.** 무료/유료 판정의 단일 출처(`isFree`는 앱이 여기서 도출 — catalog에 `isFree`는 안 씀) |
 | `productId` | string | 유료 ✅ | Play 인앱상품 SKU. 스킨빌더는 유료 스킨에 `skin_{skinid}`를 자동 입력. 무료 스킨에는 불필요 |
 | `prestige` | boolean | ❌ | 희귀(프리스티지) 스킨. 평생이용권으로도 해금 안 됨 → 항상 개별구매. 상점 별도 표시. 생략 시 `false` |
-| `hidden` | boolean | ❌ | catalog에는 유지하지만 상점 목록에는 노출하지 않을 때 사용. 생략 시 `false` |
-| `saleStart` | string | ❌ | 판매 시작일 `"yyyy-MM-dd"`. 앱은 이 날짜 전이면 미출시로 보고 상점에서 숨김. 현재 빌더는 직접 생성하지 않으므로 수동 catalog용 |
-| `saleEnd` | string | ❌ | 판매 종료일 `"yyyy-MM-dd"`(당일 포함). 종료일이 지나면 기간만료로 표시하고 신규 구매를 막음 |
+| `hidden` | boolean | ❌ | catalog에는 유지하지만 일반 상점 목록에는 노출하지 않을 때 사용. 생략 시 `false` |
+| `archived` | boolean | ❌ | 판매 이력 때문에 재다운로드 자료를 보존하는 종료 상품. 자동 삭제 파이프라인만 설정. 평생이용권 신규 해금 대상에서 제외 |
+| `saleStart` | string | ❌ | 판매 시작일 `"yyyy-MM-dd"`. 일반 미보유 사용자에게는 숨기지만 유효한 평생이용권 사용자는 미리 이용 가능. 현재 빌더는 직접 생성하지 않으므로 수동 catalog용 |
+| `saleEnd` | string | ❌ | 판매 종료일 `"yyyy-MM-dd"`(당일 포함). 종료 후 신규 구매·평생이용권 해금을 막고 개별 구매/개별 기프트 보유자만 유지 |
 | `description` | string | ❌ | 상점 히어로 카드 부제(한 줄). 생략 시 부제 줄 생략 |
 | `localized` | object | ❌ | 언어별 이름/설명. 현재 빌더는 `localized.en.name`, `localized.en.description`을 생성 |
 | `giftCodes` | array | ❌ | 개별 테마 기프트코드 목록. 각 항목은 `{hash, maxUses, expiresAt?}`이며 스킨빌더 마커로 병합 권장 |
 | `createdAt` | string | ❌ | 출시일 `"yyyy-MM-dd"`. 상점 NEW 배지 판정(출시일+7일 이내). 생략 시 NEW 안 뜸 |
-| `version` | number | ❌ | 테마 버전(사람이 보는 체인지로그용 — 앱 동작엔 미사용). 스킨빌더 자동배치 시 재업로드면 +1 됨 |
+| `version` | number | ❌ | 테마 배포 버전. 앱이 설치 버전과 비교해 업데이트 버튼을 표시. 스킨빌더 자동배치 시 재업로드면 +1 됨 |
 
 > **공개 자동 유추 경로** (`{baseUrl}/` 기준): 무료 zip은 `character/zip/{skinId}.zip`, 미리보기는 `character/preview/{skinId}/thumb.png`.
 > 유료 zip 다운로드 경로는 공개 catalog URL이 아니라 앱의 결제 검증 Worker가 결정합니다.

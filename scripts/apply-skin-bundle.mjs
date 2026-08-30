@@ -24,6 +24,8 @@ const R2_DELETE = path.join(ROOT, "_r2_delete.txt");  // R2에서 지울 키({sk
 // 워크플로우의 Play 스텝이 이 둘을 읽어 인앱상품(SKU)을 upsert/비활성화한 뒤 catalog를 커밋한다.
 const PLAY_UPSERT = path.join(ROOT, "_play_upsert.json"); // [{productId,skinId,name,price}] — 등록/수정할 유료 상품
 const PLAY_DELETE = path.join(ROOT, "_play_delete.txt");  // 비활성화할 productId 한 줄씩(삭제된 유료 스킨)
+const PLAY_DELETE_RESULTS = path.join(ROOT, "_play_delete_results.json");
+const PENDING_PAID_DELETES = path.join(ROOT, "_pending_paid_deletes.json");
 // 은퇴(삭제)한 skinId/productId 원장 — 이 파일은 '커밋'된다(.gitignore 대상 아님).
 // 삭제할 때마다 자동 적립하고, 나중에 같은 skinId가 다시 올라오면 재사용을 감지해 경고한다.
 const RETIRED = path.join(ROOT, "_retired_ids.json");
@@ -45,11 +47,6 @@ function today() { return new Date().toISOString().slice(0, 10); }
 
 /** catalog 항목이 유료인지(price>0). */
 function isPaidEntry(e) { return e && Number(e.price) > 0; }
-
-/** R2 삭제 매니페스트에 키를 한 줄 추가(중복 무방, 워크플로우가 || true로 관대 처리). */
-function queueR2Delete(skinId) {
-  fs.appendFileSync(R2_DELETE, `${skinId}.zip\n`);
-}
 
 /** 유료 catalog 항목의 Play 인앱상품 ID(SKU). 빌더는 productId를 넣지만, 누락 시 결정적으로 파생. */
 function productIdOf(entry) {
@@ -113,6 +110,8 @@ fs.rmSync(R2_DELETE, { force: true });
 // Play 동기화 매니페스트도 매 실행 새로 시작.
 fs.rmSync(PLAY_UPSERT, { force: true });
 fs.rmSync(PLAY_DELETE, { force: true });
+fs.rmSync(PLAY_DELETE_RESULTS, { force: true });
+fs.rmSync(PENDING_PAID_DELETES, { force: true });
 let applied = 0;
 
 for (const zip of zips) {
@@ -174,6 +173,9 @@ for (const zip of zips) {
 
   // 4) catalog 병합 (skinId 기준 upsert; 기존이면 version +1)
   const idx = catalog.skins.findIndex(s => s.skinId === entry.skinId);
+  if (idx >= 0 && catalog.skins[idx].archived) {
+    throw new Error(`${zip}: '${entry.skinId}'는 판매 이력 보존을 위해 보관된 ID입니다. 새 skinId/productId를 사용하세요.`);
+  }
 
   // 방법1: 예전에 삭제(은퇴)했던 skinId가 다시 올라오는지 감지.
   //   skinId 재사용은 보안 누수는 아니지만, 옛 스킨을 보유했던 사용자 화면에 잘못 '보유'로 뜨는
@@ -211,6 +213,11 @@ for (const zip of zips) {
   if (paid) {
     queuePlayUpsert(entry, idx < 0);
     log(`  → Play 동기화 예약: ${productIdOf(entry)} (${entry.price}원)`);
+    // 현재 키와 별도로 버전 키도 보존해 잘못된 업데이트를 이전 버전으로 되돌릴 수 있게 한다.
+    const versionedZip = path.join(R2_UPLOAD, "versions", skinId, `v${entry.version}.zip`);
+    fs.mkdirSync(path.dirname(versionedZip), { recursive: true });
+    fs.copyFileSync(zipSrc, versionedZip);
+    log(`  → R2 버전 보관 예약: versions/${skinId}/v${entry.version}.zip`);
   }
 
   // 6) 처리한 inbox zip 제거
@@ -218,8 +225,9 @@ for (const zip of zips) {
   applied++;
 }
 
-// 삭제 마커(_inbox/{skinId}.delete.json) 처리: character/zip·character/preview·catalog에서 전체 제거.
+// 삭제 마커 처리. 유료 상품은 Play 판매 이력을 확인하기 전에는 catalog/R2/preview를 건드리지 않는다.
 let deleted = 0;
+const pendingPaidDeletes = [];
 const markers = fs.readdirSync(INBOX).filter(f => f.toLowerCase().endsWith(".delete.json"));
 for (const marker of markers) {
   const markerData = readJsonMarker(marker);
@@ -239,13 +247,20 @@ for (const marker of markers) {
   const markerPaid = Number(markerData.price) > 0 || !!validMarkerProductId;
   const deleteEntry = existing || (markerPaid ? {
     skinId,
+    name: String(markerData.name || skinId),
     productId: validMarkerProductId ? markerProductId : `skin_${skinId.toLowerCase()}`,
     price: Number(markerData.price) || 1,
   } : null);
   if (isPaidEntry(existing) || markerPaid) {
-    queueR2Delete(skinId);
     queuePlayDelete(deleteEntry);
-    log(`  → (유료) R2 삭제 + Play 비활성화 예약: ${skinId}`);
+    pendingPaidDeletes.push({
+      skinId,
+      marker,
+      productId: productIdOf(deleteEntry),
+      catalogEntry: existing || deleteEntry,
+    });
+    log(`  → (유료) Play 이력 판정 대기: ${skinId} (catalog/R2 보존)`);
+    continue;
   }
   fs.rmSync(path.join(ROOT, "character", "zip", `${skinId}.zip`), { force: true });
   fs.rmSync(path.join(ROOT, "character", "preview", skinId), { recursive: true, force: true });
@@ -354,6 +369,10 @@ if (playUpserts.length > 0) {
   fs.writeFileSync(PLAY_UPSERT, JSON.stringify(playUpserts, null, 2) + "\n");
   log(`Play upsert 매니페스트: ${playUpserts.length}개 → _play_upsert.json`);
 }
+if (pendingPaidDeletes.length > 0) {
+  fs.writeFileSync(PENDING_PAID_DELETES, JSON.stringify(pendingPaidDeletes, null, 2) + "\n");
+  log(`유료 삭제 대기 매니페스트: ${pendingPaidDeletes.length}개`);
+}
 
 fs.rmSync(WORK, { recursive: true, force: true });
-log(`완료: ${applied}개 번들 적용, ${deleted}개 삭제, 평생이용권 코드 ${passCodesApplied}개, 개별 테마 코드 ${skinCodesApplied}개, catalog.json 갱신.`);
+log(`완료: ${applied}개 번들 적용, ${deleted}개 즉시 삭제, ${pendingPaidDeletes.length}개 Play 판정 대기, 평생이용권 코드 ${passCodesApplied}개, 개별 테마 코드 ${skinCodesApplied}개, catalog.json 갱신.`);

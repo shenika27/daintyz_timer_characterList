@@ -9,9 +9,8 @@
 //   - 가격환산: POST pricing:convertRegionPrices (옛 autoConvertMissingPrices 재현)
 //   - 상태변경: POST oneTimeProducts/{id}/purchaseOptions:batchUpdateStates (활성/비활성)
 //
-// 앱 클라이언트는 Play Billing Library 7(=레거시 조회, queryProductDetails INAPP)이라,
-//   상품의 구매옵션을 반드시 **buyOption.legacyCompatible=true** 로 만들어야
-//   앱이 상품을 조회·구매할 수 있다(신 모델 상품을 옛 클라이언트에 노출하는 유일한 방법).
+// 앱 클라이언트는 Play Billing Library 9의 queryProductDetails(INAPP)를 사용한다.
+//   buyOption.legacyCompatible=true도 유지하며, 앱은 조회된 1회성 오퍼의 offerToken을 구매 요청에 전달한다.
 //
 // 흐름(워크플로우): 번들 배치 → catalog 병합 → R2 업로드 → [이 스크립트] → catalog 커밋.
 //   유료 스킨이 새로 올라오면 Play Console에 SKU(skin_{skinid})를 만들어 둬야
@@ -43,6 +42,7 @@ import path from "node:path";
 const ROOT = process.cwd();
 const PLAY_UPSERT = path.join(ROOT, "_play_upsert.json");
 const PLAY_DELETE = path.join(ROOT, "_play_delete.txt");
+const PLAY_DELETE_RESULTS = path.join(ROOT, "_play_delete_results.json");
 
 const PKG = process.env.ANDROID_PACKAGE_NAME || "";
 const NEW_STATUS = (process.env.PLAY_PRODUCT_STATUS || "inactive").toLowerCase() === "active"
@@ -175,7 +175,7 @@ async function convertRegionPrices(token, price) {
   return { configs, newRegionsConfig, regionsVersion };
 }
 
-/** OneTimeProduct 리소스 본문. 구매옵션 하나(legacyCompatible)로 PBL7 앱이 조회·구매 가능하게 만든다.
+/** OneTimeProduct 리소스 본문. 구매옵션 하나(legacyCompatible)로 앱이 조회·구매 가능하게 만든다.
  *  state 는 Output-only 라 여기서 설정하지 않는다(활성/비활성은 별도 batchUpdateStates). */
 function buildProduct(item, pricing, purchaseOptionId) {
   const title = String(item.name || item.skinId).slice(0, 55);
@@ -241,6 +241,7 @@ const SA = (() => {
 const token = await getAccessToken(SA);
 let created = 0, updated = 0, deactivated = 0, hardDeleted = 0, skipped = 0;
 const errors = [];
+const deleteResults = [];
 
 // 등록/수정: GET → 없으면 생성(구매옵션 DRAFT), 있으면 리스팅·가격만 갱신(state 보존).
 for (const item of upserts) {
@@ -301,7 +302,12 @@ for (const item of upserts) {
 for (const productId of deletes) {
   try {
     const got = await apiFetch(token, otpUrl(productId), "GET");
-    if (got.status === 404) { skipped++; log(`삭제 대상 없음(이미 삭제됨): ${productId}`); continue; }
+    if (got.status === 404) {
+      skipped++;
+      deleteResults.push({ productId, outcome: "hard_deleted" });
+      log(`삭제 대상 없음(이미 삭제됨): ${productId}`);
+      continue;
+    }
     if (!got.ok) { errors.push(`get(삭제용) ${productId} 실패(HTTP ${got.status}): ${JSON.stringify(got.json)}`); continue; }
     const opts = Array.isArray(got.json.purchaseOptions) ? got.json.purchaseOptions : [];
     const everLive = opts.some(o => o.state && o.state !== "DRAFT" && o.state !== "STATE_UNSPECIFIED");
@@ -310,6 +316,7 @@ for (const productId of deletes) {
       // 전부 DRAFT = 한 번도 판매/노출된 적 없음 → 하드삭제(되돌릴 수 없지만 누수 0).
       await deleteProduct(token, productId);
       hardDeleted++;
+      deleteResults.push({ productId, outcome: "hard_deleted" });
       log(`하드삭제(미판매): ${productId}`);
       continue;
     }
@@ -319,6 +326,7 @@ for (const productId of deletes) {
     const active = opts.filter(o => o.state === "ACTIVE");
     if (active.length === 0) {
       skipped++;
+      deleteResults.push({ productId, outcome: "archived" });
       log(`비활성화 불필요(이력 보존): ${productId} (활성 구매옵션 없음 — 이미 비활성)`);
       continue;
     }
@@ -326,6 +334,7 @@ for (const productId of deletes) {
       await setPurchaseOptionState(token, productId, o.purchaseOptionId, "deactivate");
     }
     deactivated++;
+    deleteResults.push({ productId, outcome: "archived" });
     log(`비활성화(이력 보존): ${productId} (구매옵션 ${active.length}개)`);
   } catch (e) {
     errors.push(String(e.message || e));
@@ -338,4 +347,8 @@ if (errors.length > 0) {
   for (const e of errors) console.error(`::error::[sync-play-products] ${e}`);
   fail(`${errors.length}건 실패. 위 오류를 확인하세요. ` +
     "권한 부족(403)이면 Play Console에서 서비스계정에 인앱상품 관리 권한을 부여해야 합니다.");
+}
+
+if (deleteResults.length > 0) {
+  fs.writeFileSync(PLAY_DELETE_RESULTS, JSON.stringify(deleteResults, null, 2) + "\n");
 }

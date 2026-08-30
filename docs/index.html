@@ -1751,7 +1751,7 @@ function productIdOfEntry(entry, skinId) {
 }
 
 // 삭제 요청을 올린 skinId 집합. 새로고침/페이지 재로딩 후에도 목록에서 회색·클릭불가가 유지되도록
-// localStorage에 보존한다(Action이 catalog에서 실제로 지우면 loadReleased가 자동으로 정리).
+// localStorage에 보존한다(Action이 완전 삭제하거나 archived로 전환하면 loadReleased가 자동으로 정리).
 const PENDING_DELETE_KEY = "skinPendingDelete";
 let pendingDeleteIds = new Set();
 try { const raw = localStorage.getItem(PENDING_DELETE_KEY); if (raw) pendingDeleteIds = new Set(JSON.parse(raw)); } catch {}
@@ -1767,14 +1767,14 @@ function markDeletePending(skinId) {
 
 function reconcilePendingDeletes(catalogSkins) {
   if (!pendingDeleteIds.size) return;
-  const catalogIds = new Set(catalogSkins.map(s => s.skinId));
-  const completedIds = [...pendingDeleteIds].filter(id => !catalogIds.has(id));
+  const activeIds = new Set(catalogSkins.filter(s => !s.archived).map(s => s.skinId));
+  const completedIds = [...pendingDeleteIds].filter(id => !activeIds.has(id));
   if (!completedIds.length) return;
   completedIds.forEach(id => pendingDeleteIds.delete(id));
   savePendingDelete();
 }
 
-// 테마 삭제 마커(_inbox 업로드용). Action이 character/zip·character/preview·catalog에서 전체 제거.
+// 테마 삭제 마커(_inbox 업로드용). 무료/미판매는 완전 삭제, 판매 이력 상품은 재다운로드용으로 보관한다.
 async function makeDeleteMarker(entry = null) {
   const fallbackId = entry?.skinId || $("skinId").value.trim();
   const id = (entry?.skinId || prompt("삭제할 테마의 skinId를 입력하세요(상점·창고·미리보기에서 모두 제거):", fallbackId) || "").trim();
@@ -1789,8 +1789,10 @@ async function makeDeleteMarker(entry = null) {
   const price = Math.max(0, Number(catalogEntry?.price) || 0);
   const paid = price > 0;
   const productId = paid ? productIdOfEntry(catalogEntry, id) : "";
-  const playLine = paid ? `\nPlay SKU '${productId}'도 비활성화(inactive) 예약됩니다.` : "";
-  if (!confirm(`정말 '${id}' 테마를 삭제할까요?\n상점·창고·미리보기에서 모두 제거됩니다.${playLine}\n(기록은 남아 있어 복구는 가능합니다.)`)) return;
+  const playLine = paid
+    ? `\nPlay SKU '${productId}'의 판매 이력을 확인합니다. 미판매면 완전 삭제하고, 판매 이력이 있으면 기존 구매자의 재다운로드용 원본만 보관합니다.`
+    : "";
+  if (!confirm(`정말 '${id}' 테마의 판매를 종료할까요?\n일반 상점·빌더 목록에서는 제거됩니다.${playLine}`)) return;
   const marker = {
     deleteSkinId: id,
     source: "skin-builder",
@@ -1804,13 +1806,13 @@ async function makeDeleteMarker(entry = null) {
     if (ok) {
       markDeletePending(id);
       $("status").innerHTML =
-        `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다. (완료되면 ↻로 목록 갱신)`;
+        `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 ${paid ? "Play 이력 판정 후 삭제/보관" : "완전 삭제"}가 실행됩니다. (완료되면 ↻로 목록 갱신)`;
     }
     return;
   }
   downloadBlob(blob, `${id}.delete.json`);
   $("status").innerHTML =
-    `<b>${escapeHtml(id)}.delete.json</b> 저장됨 → <b>업로드</b>하면 catalog/R2${paid ? "/Play SKU" : ""} 정리가 실행됩니다.`;
+    `<b>${escapeHtml(id)}.delete.json</b> 저장됨 → <b>업로드</b>하면 ${paid ? "Play 이력 판정 후 삭제/보관" : "완전 삭제"}가 실행됩니다.`;
   alert(`삭제 파일 '${id}.delete.json' 을 저장했습니다.\n📤 업로드 하면 자동으로 삭제됩니다.`);
 }
 
@@ -1840,8 +1842,10 @@ function updateDupHint() {
   }
   const hit = releasedSkins.find(s => (s.skinId || "").toLowerCase() === id.toLowerCase());
   if (hit) {
-    el.innerHTML = `⚠ <b>${escapeHtml(hit.skinId)}</b>는 이미 출시됨("${escapeHtml(hit.name || "")}"). ` +
-      `새 스킨이면 다른 ID를, 업데이트면 그대로 두세요(기존 교체).`;
+    el.innerHTML = hit.archived
+      ? `✗ <b>${escapeHtml(hit.skinId)}</b>는 판매 이력 보존 중인 ID라 재사용할 수 없어요. 새 skinId/productId를 쓰세요.`
+      : `⚠ <b>${escapeHtml(hit.skinId)}</b>는 이미 출시됨("${escapeHtml(hit.name || "")}"). ` +
+        `새 스킨이면 다른 ID를, 업데이트면 그대로 두세요(기존 교체).`;
     el.style.color = "var(--danger)";
   } else if (!releasedSkins.length) {
     el.textContent = ""; // 출시목록 미로드 — 중복 판단 보류(형식은 통과)
@@ -1854,14 +1858,15 @@ function updateDupHint() {
 function renderReleased() {
   const ul = $("relList");
   const q = $("relSearch").value.trim().toLowerCase();
-  const list = releasedSkins.filter(s =>
+  const activeSkins = releasedSkins.filter(s => !s.archived);
+  const list = activeSkins.filter(s =>
     !q ||
     (s.skinId || "").toLowerCase().includes(q) ||
     (s.name || "").toLowerCase().includes(q) ||
     (s.localized?.en?.name || "").toLowerCase().includes(q));
-  $("relCount").textContent = `${list.length}/${releasedSkins.length}`;
+  $("relCount").textContent = `${list.length}/${activeSkins.length}`;
   if (!list.length) {
-    ul.innerHTML = `<li class="rel-empty">${releasedSkins.length ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
+    ul.innerHTML = `<li class="rel-empty">${activeSkins.length ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
     return;
   }
   ul.innerHTML = "";
@@ -1915,7 +1920,7 @@ async function loadReleased() {
     const data = await res.json();
     releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
     releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
-    // 카탈로그에서 사라진 항목은 삭제 완료로 간주해 회색 잠금을 해제한다.
+    // 카탈로그에서 사라졌거나 archived로 바뀐 항목은 삭제 완료로 간주해 회색 잠금을 해제한다.
     reconcilePendingDeletes(releasedSkins);
     renderReleased();
     if ($("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
@@ -1953,7 +1958,7 @@ let pendingGiftRegistry = null;
 
 function selectedGiftSkin() {
   const skinId = $("giftTargetSkinId").value.trim().toLowerCase();
-  return releasedSkins.find(s => String(s.skinId || "").toLowerCase() === skinId) || null;
+  return releasedSkins.find(s => !s.archived && String(s.skinId || "").toLowerCase() === skinId) || null;
 }
 
 function updateGiftControls() {
@@ -2001,7 +2006,7 @@ function updateLifetimePassCodeHint() {
   } else if (skinTargetOn && !/^[A-Za-z0-9_]+$/.test(skinId)) {
     hint.textContent = "개별 테마 코드는 출시된 테마를 선택해야 합니다.";
     hint.style.color = "var(--sub)";
-  } else if (skinTargetOn && releasedSkins.length && !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase())) {
+  } else if (skinTargetOn && releasedSkins.length && !releasedSkins.some(s => !s.archived && (s.skinId || "").toLowerCase() === skinId.toLowerCase())) {
     hint.textContent = `'${skinId}'는 출시된 테마 목록에 없어요 — 목록에서 선택하세요.`;
     hint.style.color = "var(--danger)";
   } else if (!$("giftLabel").value.trim()) {
@@ -2044,7 +2049,7 @@ function buildLifetimePassMarker() {
   if (!codes.length) errors.push("해금 코드를 입력하거나 자동 생성하세요.");
   if (targetType === "skin" && !/^[A-Za-z0-9_]+$/.test(skinId)) errors.push("개별 테마 skinId는 영문/숫자/_ 만 사용하세요.");
   if (targetType === "skin" && /^[A-Za-z0-9_]+$/.test(skinId) && releasedSkins.length &&
-      !releasedSkins.some(s => (s.skinId || "").toLowerCase() === skinId.toLowerCase()))
+      !releasedSkins.some(s => !s.archived && (s.skinId || "").toLowerCase() === skinId.toLowerCase()))
     errors.push(`'${skinId}'는 출시된 테마 목록에 없어요. 목록에서 선택하세요.`);
   codes.forEach(c => { if (!/^[A-Z0-9-]+$/.test(c)) errors.push(`코드 '${c}'는 영문/숫자/- 만 사용하세요.`); });
   const selected = targetType === "skin" ? selectedGiftSkin() : null;
@@ -2204,11 +2209,11 @@ let giftComboActive = -1; // 키보드 하이라이트 인덱스
 
 function giftComboMatches() {
   const q = $("giftTargetSkinId").value.trim().toLowerCase();
-  return releasedSkins.filter(s =>
+  return releasedSkins.filter(s => !s.archived && (
     !q ||
     (s.skinId || "").toLowerCase().includes(q) ||
     (s.name || "").toLowerCase().includes(q) ||
-    (s.localized?.en?.name || "").toLowerCase().includes(q));
+    (s.localized?.en?.name || "").toLowerCase().includes(q)));
 }
 
 function renderGiftCombo() {

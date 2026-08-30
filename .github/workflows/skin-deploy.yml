@@ -49,8 +49,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          uploads=(_r2_upload/*.zip)
+          mapfile -t uploads < <(find _r2_upload -type f -name '*.zip' 2>/dev/null | sort)
           if [ ${#uploads[@]} -eq 0 ]; then
             echo "R2 업로드 없음(무료 전용 또는 삭제만) — 건너뜀"
             exit 0
@@ -60,7 +59,7 @@ jobs:
             exit 1
           fi
           for f in "${uploads[@]}"; do
-            key="$(basename "$f")"
+            key="${f#_r2_upload/}"
             echo "R2 업로드: daintyz-skins/$key"
             npx -y "$WRANGLER" r2 object put "daintyz-skins/$key" --file "$f"
           done
@@ -78,6 +77,11 @@ jobs:
           PLAY_PRODUCT_STATUS: inactive
         run: node scripts/sync-play-products.mjs
 
+      # Play 판정 결과에 따라 삭제 확정:
+      # 미판매(DRAFT)는 완전 삭제, 판매 이력이 있으면 catalog/R2를 남기고 hidden+archived 처리한다.
+      - name: 유료 스킨 삭제 확정
+        run: node scripts/finalize-skin-deletions.mjs
+
       - name: 변경사항 커밋
         run: |
           git config user.name "skin-bot"
@@ -92,7 +96,7 @@ jobs:
             git push
           fi
 
-      # 교체·제거된 유료 스킨의 옛 R2 객체 삭제 — 반드시 맨 마지막에.
+      # Play에서 미판매로 확인된 유료 스킨의 R2 객체 삭제 — 반드시 맨 마지막에.
       # 업로드·Play 동기화·catalog 커밋이 모두 성공한 뒤에만 지우므로,
       # 삭제가 실패해도 판매 중 상품의 zip이 먼저 사라지는 일은 없고 catalog에서
       # 이미 빠진 미사용 객체만 남는다. 그래서 실패를 '|| true'로 삼키지 않고
