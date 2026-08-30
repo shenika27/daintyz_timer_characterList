@@ -28,6 +28,15 @@
       "productId": "skin_spc05",
       "createdAt": "2026-08-30T13:38:18",
       "version": 1
+    },
+    {
+      "skinId": "spc06",
+      "name": "spc06",
+      "price": 700,
+      "prestige": false,
+      "productId": "skin_spc06",
+      "createdAt": "2026-08-30T13:38:18",
+      "version": 1
     }
   ]
 }
