@@ -68,6 +68,22 @@
       },
       "createdAt": "2026-08-30T16:29:13",
       "version": 2
+    },
+    {
+      "skinId": "spc13",
+      "name": "토스터기 식빵씨",
+      "price": 700,
+      "prestige": false,
+      "productId": "skin_spc13",
+      "description": "출시 예정 (수정중)",
+      "localized": {
+        "en": {
+          "name": "Toaster Sikpan.c",
+          "description": "Scheduled for release"
+        }
+      },
+      "createdAt": "2026-08-30T22:13:42",
+      "version": 1
     }
   ]
 }
