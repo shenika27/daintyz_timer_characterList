@@ -3,6 +3,57 @@
   "lifetimePassGiftCodes": [],
   "skins": [
     {
+      "skinId": "sikpanc03",
+      "name": "토스트기 식빵씨",
+      "price": 700,
+      "prestige": false,
+      "productId": "skin_sikpanc03",
+      "description": "정식출시 시 오픈",
+      "localized": {
+        "en": {
+          "name": "Toaster Sikpan.c",
+          "description": "Open upon official release"
+        }
+      },
+      "createdAt": "2026-08-29T22:10:19",
+      "version": 1,
+      "hidden": true,
+      "archived": true
+    },
+    {
+      "skinId": "spc06",
+      "name": "spc06",
+      "price": 700,
+      "prestige": false,
+      "productId": "skin_spc06",
+      "createdAt": "2026-08-30T13:38:18",
+      "version": 1,
+      "hidden": true,
+      "archived": true
+    },
+    {
+      "skinId": "spc010",
+      "name": "spc10",
+      "price": 700,
+      "prestige": false,
+      "productId": "skin_spc010",
+      "createdAt": "2026-08-30T16:29:13",
+      "version": 1,
+      "hidden": true,
+      "archived": true
+    },
+    {
+      "skinId": "spc011",
+      "name": "spc11",
+      "price": 8000,
+      "prestige": false,
+      "productId": "skin_spc011",
+      "createdAt": "2026-08-30T16:29:13",
+      "version": 1,
+      "hidden": true,
+      "archived": true
+    },
+    {
       "skinId": "spc12",
       "name": "토스터기 식빵씨",
       "price": 700,

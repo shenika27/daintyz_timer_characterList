@@ -1,3 +1,90 @@
 {
-  "retired": []
+  "retired": [
+    {
+      "skinId": "15",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "16",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "17",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "18",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "19",
+      "productId": "skin_19",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "cha07",
+      "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "cha08",
+      "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "cha09",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "cha11",
+      "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "cha12",
+      "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "cha13",
+      "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "cha14",
+      "retiredAt": "2026-08-28"
+    },
+    {
+      "skinId": "sikpanc01",
+      "productId": "skin_sikpanc01",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "sikpanc02",
+      "productId": "skin_sikpanc02",
+      "retiredAt": "2026-08-29"
+    },
+    {
+      "skinId": "spc012",
+      "productId": "skin_spc012",
+      "retiredAt": "2026-08-30"
+    },
+    {
+      "skinId": "spc04",
+      "retiredAt": "2026-08-30"
+    },
+    {
+      "skinId": "spc05",
+      "productId": "skin_spc05",
+      "retiredAt": "2026-08-30"
+    },
+    {
+      "skinId": "spc07",
+      "retiredAt": "2026-08-30"
+    },
+    {
+      "skinId": "spc08",
+      "retiredAt": "2026-08-30"
+    },
+    {
+      "skinId": "spc09",
+      "productId": "skin_spc09",
+      "retiredAt": "2026-08-30"
+    }
+  ]
 }
