@@ -18,7 +18,13 @@
       "createdAt": "2026-08-29T22:10:19",
       "version": 1,
       "hidden": true,
-      "archived": true
+      "archived": true,
+      "giftCodes": [
+        {
+          "hash": "5989efb1f4f4af07c64a3d4c31410463ae25d78da9f0cde0b57c7435528cc9fc",
+          "maxUses": 1
+        }
+      ]
     },
     {
       "skinId": "spc05",
