@@ -67,6 +67,10 @@
       "skinId": "spc05",
       "productId": "skin_spc05",
       "retiredAt": "2026-08-30"
+    },
+    {
+      "skinId": "spc08",
+      "retiredAt": "2026-08-30"
     }
   ]
 }
