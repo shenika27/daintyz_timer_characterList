@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="CharacterTodo 캐릭터 및 판매 코드 관리 빌더">
+  <meta name="description" content="CharacterTodo 캐릭터 제작 및 판매 코드 관리 빌더">
   <title>todo-builder | daintyz builder</title>
   <link rel="stylesheet" href="../shared/builder-shell.css">
   <link rel="stylesheet" href="./todo-builder.css">
@@ -25,52 +25,184 @@
     <section class="builder-hero todo-hero">
       <div>
         <p class="builder-eyebrow">TODO-BUILDER</p>
-        <h1>CharacterTodo 판매 관리</h1>
-        <p>판매 캐릭터를 등록하고 주문별 코드를 발급·재발급·폐기·환불합니다.</p>
+        <h1>CharacterTodo 빌더</h1>
+        <p>캐릭터를 제작해 앱에 게시하고 주문별 판매 코드를 관리합니다.</p>
       </div>
       <button class="todo-button todo-button-secondary" type="button" id="refreshAllButton">전체 새로고침</button>
     </section>
 
+    <nav class="todo-workspace-tabs" aria-label="CharacterTodo 작업 선택">
+      <button type="button" data-workspace-tab="characters" aria-selected="true">캐릭터 제작·관리</button>
+      <button type="button" data-workspace-tab="sales" aria-selected="false">주문·코드</button>
+    </nav>
+
     <div class="todo-notice" id="pageNotice" role="status" aria-live="polite" hidden></div>
 
-    <section class="todo-layout" aria-label="판매 코드 발급 도구">
-      <article class="todo-card">
-        <div class="todo-section-heading">
+    <section id="characterWorkspace" class="todo-workspace" aria-label="캐릭터 제작·관리">
+      <section id="characterLibraryScreen" class="todo-character-library">
+        <div class="todo-page-heading">
           <div>
-            <p class="todo-kicker">판매 대상</p>
-            <h2>캐릭터 관리</h2>
+            <p class="todo-kicker">CHARACTER LIBRARY</p>
+            <h2>캐릭터 제작·관리</h2>
+            <p>캐릭터를 선택하면 전체 화면 편집기로 이동합니다.</p>
           </div>
-          <span class="todo-count" id="characterCount">0개</span>
+          <button class="todo-button todo-button-primary" type="button" id="newCharacterButton">+ 새 캐릭터</button>
         </div>
 
-        <form id="characterForm" class="todo-form">
-          <label>
-            캐릭터 ID
-            <input id="characterId" name="characterId" type="text" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{1,63}" placeholder="예: potato_01" required>
+        <div class="todo-library-toolbar">
+          <label class="todo-search-field">
+            <span class="todo-sr-only">캐릭터 검색</span>
+            <input id="characterSearchInput" type="search" maxlength="100" placeholder="캐릭터 이름·ID 검색">
           </label>
           <label>
-            표시 이름
-            <input id="characterName" name="characterName" type="text" maxlength="100" placeholder="예: 감자" required>
-          </label>
-          <label>
-            판매 상태
-            <select id="characterStatus" name="characterStatus">
-              <option value="DRAFT">준비 중</option>
-              <option value="PUBLISHED">판매 중</option>
+            <span class="todo-sr-only">캐릭터 상태 필터</span>
+            <select id="characterStatusFilter">
+              <option value="">모든 상태</option>
+              <option value="DRAFT">초안</option>
+              <option value="PUBLISHED">게시됨</option>
               <option value="ARCHIVED">판매 종료</option>
             </select>
           </label>
-          <div class="todo-form-actions">
-            <button class="todo-button todo-button-primary" type="submit" id="saveCharacterButton">캐릭터 저장</button>
-            <button class="todo-button todo-button-ghost" type="button" id="resetCharacterButton">입력 초기화</button>
+          <span class="todo-count" id="characterCount">0개</span>
+        </div>
+
+        <div class="todo-character-grid" id="characterList" aria-live="polite"></div>
+      </section>
+
+      <section id="characterEditorScreen" class="todo-character-editor" hidden>
+        <div class="todo-editor-heading">
+          <button class="todo-back-button" type="button" id="backToCharactersButton">← 캐릭터 목록</button>
+          <div class="todo-editor-title-row">
+            <div>
+              <p class="todo-kicker" id="editorEyebrow">NEW CHARACTER</p>
+              <h2 id="editorTitle">새 캐릭터 제작</h2>
+              <p id="editorSubtitle">기본정보부터 입력해 주세요.</p>
+            </div>
+            <div class="todo-editor-heading-actions">
+              <button class="todo-button todo-button-ghost" type="button" id="publishHistoryButton" disabled>게시 기록 없음</button>
+              <span id="editorStatusBadge" class="todo-status" data-tone="warning">초안</span>
+            </div>
           </div>
-          <p class="todo-help">판매 코드 발급에는 ‘판매 중’ 캐릭터만 사용할 수 있습니다.</p>
+        </div>
+
+        <form id="characterForm" class="todo-editor-form">
+          <nav class="todo-editor-tabs" aria-label="캐릭터 편집 단계">
+            <button type="button" data-editor-tab="basic" aria-selected="true">1. 기본정보</button>
+            <button type="button" data-editor-tab="images" aria-selected="false">2. 이미지</button>
+            <button type="button" data-editor-tab="audio" aria-selected="false">3. 음성</button>
+            <button type="button" data-editor-tab="preview" aria-selected="false">4. 미리보기</button>
+          </nav>
+
+          <section class="todo-editor-panel" data-editor-panel="basic">
+            <div class="todo-editor-section-heading">
+              <div>
+                <p class="todo-kicker">BASIC INFORMATION</p>
+                <h3>기본정보</h3>
+                <p>캐릭터를 구분하고 운영 화면에 표시할 정보를 입력합니다.</p>
+              </div>
+            </div>
+            <div class="todo-basic-grid">
+              <div class="todo-editor-fields">
+                <label>
+                  캐릭터 ID
+                  <input id="characterId" name="characterId" type="text" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{1,63}" placeholder="예: potato_01" required>
+                  <small>최초 저장 후에는 변경할 수 없습니다.</small>
+                </label>
+                <label>
+                  표시 이름
+                  <input id="characterName" name="characterName" type="text" maxlength="100" placeholder="예: 감자" required>
+                </label>
+                <label>
+                  캐릭터 설명
+                  <textarea id="characterDescription" maxlength="300" rows="5" placeholder="캐릭터의 특징과 판매 페이지에 사용할 설명을 입력하세요."></textarea>
+                </label>
+                <label>
+                  운영 상태
+                  <select id="characterStatus" name="characterStatus">
+                    <option value="DRAFT">초안</option>
+                    <option value="PUBLISHED">게시됨·판매 중</option>
+                    <option value="ARCHIVED">판매 종료</option>
+                  </select>
+                </label>
+                <p class="todo-help">게시 자동화가 연결되면 앱 게시 성공 시 ‘게시됨’ 상태로 자동 전환됩니다.</p>
+              </div>
+              <aside class="todo-thumbnail-card">
+                <div class="todo-thumbnail-preview" id="thumbnailPreview">
+                  <span>대표 이미지</span>
+                </div>
+                <label class="todo-file-button">
+                  대표 이미지 선택
+                  <input id="thumbnailInput" type="file" accept=".png,.gif,image/png,image/gif">
+                </label>
+                <p>캐릭터 목록과 운영 화면에서 사용할 정사각형 이미지를 권장합니다.</p>
+              </aside>
+            </div>
+          </section>
+
+          <section class="todo-editor-panel" data-editor-panel="images" hidden>
+            <div class="todo-editor-section-heading">
+              <div>
+                <p class="todo-kicker">ACTION IMAGES</p>
+                <h3>상황별 이미지</h3>
+                <p>PNG 또는 GIF를 올립니다. 기본 이미지는 필수이고 나머지는 없으면 기본 이미지로 대체됩니다.</p>
+              </div>
+              <span class="todo-progress" id="imageProgress">0 / 11</span>
+            </div>
+            <div class="todo-asset-grid" id="characterImageSlots"></div>
+          </section>
+
+          <section class="todo-editor-panel" data-editor-panel="audio" hidden>
+            <div class="todo-editor-section-heading">
+              <div>
+                <p class="todo-kicker">ACTION AUDIO</p>
+                <h3>상황별 음성·효과음</h3>
+                <p>짧은 WAV 또는 FLAC 파일을 연결하고 바로 재생해 확인합니다.</p>
+              </div>
+              <span class="todo-progress" id="audioProgress">0 / 10</span>
+            </div>
+            <div class="todo-audio-list" id="characterAudioSlots"></div>
+          </section>
+
+          <section class="todo-editor-panel" data-editor-panel="preview" hidden>
+            <div class="todo-editor-section-heading">
+              <div>
+                <p class="todo-kicker">LIVE PREVIEW</p>
+                <h3>캐릭터 미리보기</h3>
+                <p>상황 버튼을 눌러 연결한 이미지와 음성을 확인합니다.</p>
+              </div>
+            </div>
+            <div class="todo-preview-layout">
+              <div class="todo-preview-actions" id="previewActionButtons"></div>
+              <div class="todo-preview-stage">
+                <div class="todo-preview-canvas" id="previewCanvas">
+                  <span>이미지를 선택하면 여기에 표시됩니다.</span>
+                </div>
+                <div class="todo-preview-meta">
+                  <strong id="previewActionName">기본</strong>
+                  <span id="previewFileName">연결된 파일 없음</span>
+                </div>
+                <button class="todo-button todo-button-secondary" type="button" id="previewAudioButton" disabled>연결 음성 재생</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="todo-editor-footer">
+            <div>
+              <strong id="characterDraftMessage">아직 저장되지 않은 캐릭터입니다.</strong>
+              <p>현재 1차 UI에서는 기본정보만 서버에 저장되며 이미지·음원 파일은 게시 자동화 연결 전까지 전송되지 않습니다.</p>
+            </div>
+            <div class="todo-form-actions">
+              <button class="todo-button todo-button-secondary" type="button" id="validateCharacterButton">게시 검증</button>
+              <button class="todo-button todo-button-ghost" type="submit" id="saveCharacterButton">초안 저장</button>
+              <button class="todo-button todo-button-primary" type="button" id="openPublishButton">앱에 게시</button>
+            </div>
+          </div>
         </form>
+      </section>
+    </section>
 
-        <div class="todo-mini-list" id="characterList" aria-live="polite"></div>
-      </article>
-
-      <article class="todo-card todo-card-wide">
+    <section id="salesWorkspace" class="todo-workspace" aria-label="주문·코드" hidden>
+      <section class="todo-card todo-sales-issue-card">
         <div class="todo-section-heading">
           <div>
             <p class="todo-kicker">신규 주문</p>
@@ -113,42 +245,75 @@
           <div id="initialCodeList" class="todo-code-list"></div>
           <p class="todo-help">코드 원문은 발급·재발급 응답에서만 운영 화면에 표시됩니다.</p>
         </section>
-      </article>
-    </section>
+      </section>
 
-    <section class="todo-card todo-orders-card">
-      <div class="todo-section-heading todo-orders-heading">
-        <div>
-          <p class="todo-kicker">발급 원장</p>
-          <h2>주문·코드 목록</h2>
+      <section class="todo-card todo-orders-card">
+        <div class="todo-section-heading todo-orders-heading">
+          <div>
+            <p class="todo-kicker">발급 원장</p>
+            <h2>주문·코드 목록</h2>
+          </div>
+          <form id="orderSearchForm" class="todo-search" role="search">
+            <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
+            <input id="orderSearchInput" type="search" maxlength="100" placeholder="주문번호·이메일·캐릭터 검색">
+            <button class="todo-button todo-button-secondary" type="submit">검색</button>
+            <button class="todo-button todo-button-ghost" type="button" id="refreshOrdersButton">새로고침</button>
+          </form>
         </div>
-        <form id="orderSearchForm" class="todo-search" role="search">
-          <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
-          <input id="orderSearchInput" type="search" maxlength="100" placeholder="주문번호·이메일·캐릭터 검색">
-          <button class="todo-button todo-button-secondary" type="submit">검색</button>
-          <button class="todo-button todo-button-ghost" type="button" id="refreshOrdersButton">새로고침</button>
-        </form>
-      </div>
 
-      <div class="todo-table-wrap">
-        <table class="todo-table">
-          <thead>
-            <tr>
-              <th scope="col">주문</th>
-              <th scope="col">구매자</th>
-              <th scope="col">캐릭터</th>
-              <th scope="col">수량</th>
-              <th scope="col">발급 횟수</th>
-              <th scope="col">상태</th>
-              <th scope="col">발급일</th>
-            </tr>
-          </thead>
-          <tbody id="orderTableBody"></tbody>
-        </table>
-        <p class="todo-empty" id="orderEmpty" hidden>조회된 발급 내역이 없습니다.</p>
-      </div>
+        <div class="todo-table-wrap">
+          <table class="todo-table">
+            <thead>
+              <tr>
+                <th scope="col">주문</th>
+                <th scope="col">구매자</th>
+                <th scope="col">캐릭터</th>
+                <th scope="col">수량</th>
+                <th scope="col">발급 횟수</th>
+                <th scope="col">상태</th>
+                <th scope="col">발급일</th>
+              </tr>
+            </thead>
+            <tbody id="orderTableBody"></tbody>
+          </table>
+          <p class="todo-empty" id="orderEmpty" hidden>조회된 발급 내역이 없습니다.</p>
+        </div>
+      </section>
     </section>
   </main>
+
+  <dialog class="todo-dialog todo-publish-dialog" id="publishDialog" aria-labelledby="publishDialogTitle">
+    <div class="todo-dialog-header">
+      <div>
+        <p class="todo-kicker">APP RELEASE</p>
+        <h2 id="publishDialogTitle">캐릭터 앱 게시</h2>
+        <p class="todo-dialog-summary">캐릭터 파일과 업데이트 로그를 새 앱 버전에 포함합니다.</p>
+      </div>
+      <button class="todo-icon-button" type="button" id="closePublishButton" aria-label="게시 확인 닫기">×</button>
+    </div>
+    <div class="todo-dialog-body">
+      <div class="todo-version-grid">
+        <label>
+          현재 앱 버전
+          <input id="currentAppVersion" type="text" value="0.6.7" readonly>
+        </label>
+        <label>
+          게시 예정 버전
+          <input id="nextAppVersion" type="text" value="0.6.8" readonly>
+        </label>
+      </div>
+      <label>
+        업데이트 로그
+        <textarea id="publishLogInput" maxlength="1000" rows="6" placeholder="예: 새로운 감자 캐릭터와 완료 음성을 추가했습니다." required></textarea>
+      </label>
+      <div class="todo-validation-box" id="publishValidationResult"></div>
+      <div class="todo-dialog-actions todo-form-actions">
+        <button class="todo-button todo-button-ghost" type="button" id="cancelPublishButton">취소</button>
+        <button class="todo-button todo-button-primary" type="button" id="confirmPublishButton" disabled>게시 자동화 연결 전</button>
+      </div>
+      <p class="todo-help">예정 버전은 현재 버전의 패치 번호를 자동으로 1 증가시키며 직접 수정할 수 없습니다.</p>
+    </div>
+  </dialog>
 
   <dialog class="todo-dialog todo-history-dialog" id="historyDialog" aria-labelledby="historyTitle">
     <div class="todo-dialog-header">

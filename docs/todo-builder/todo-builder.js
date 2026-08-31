@@ -3,7 +3,7 @@
 
   const API_URL = "https://daintyz-skin-inbox.xornexon.workers.dev";
   const STATUS_META = Object.freeze({
-    DRAFT: ["준비 중", "warning"],
+    DRAFT: ["초안", "warning"],
     PUBLISHED: ["판매 중", "active"],
     ARCHIVED: ["판매 종료", "neutral"],
     ACTIVE: ["정상", "active"],
@@ -35,6 +35,21 @@
       defaultReason: "구매 취소 환불",
     },
   });
+  const CHARACTER_ACTIONS = Object.freeze([
+    { id: "default", label: "기본", description: "오늘·평상시", required: true },
+    { id: "overdue", label: "밀린 할일", description: "기한이 지난 할일이 있을 때" },
+    { id: "delete", label: "삭제", description: "할일을 캐릭터에 끌어다 놓을 때" },
+    { id: "idle", label: "비활성", description: "마지막 활동 후 설정 시간이 지났을 때" },
+    { id: "done", label: "완료", description: "할일 완료 리액션" },
+    { id: "add", label: "할일 추가", description: "새 할일 추가 리액션" },
+    { id: "work", label: "타이머 중", description: "타이머가 작동 중일 때" },
+    { id: "pause", label: "타이머 정지", description: "타이머가 일시정지됐을 때" },
+    { id: "timer_done", label: "타이머 완료", description: "타이머 종료 리액션" },
+    { id: "open", label: "목록 열림", description: "할일 목록을 열 때" },
+    { id: "closed", label: "목록 닫힘", description: "할일 목록을 닫을 때" },
+  ]);
+  const AUDIO_ACTIONS = Object.freeze(CHARACTER_ACTIONS.filter((action) => action.id !== "default"));
+  const CURRENT_APP_VERSION = "0.6.7";
 
   const state = {
     characters: [],
@@ -46,6 +61,15 @@
     pendingAction: null,
     noticeTimer: 0,
     nextOrderItemId: 1,
+    activeWorkspace: "characters",
+    activeEditorTab: "basic",
+    editingCharacterId: "",
+    characterDrafts: new Map(),
+    imageAssets: new Map(),
+    audioAssets: new Map(),
+    thumbnailAsset: null,
+    previewAction: "default",
+    playingAudio: null,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -55,6 +79,7 @@
   const historyDialog = byId("historyDialog");
   const reasonDialog = byId("reasonDialog");
   const codeDialog = byId("codeDialog");
+  const publishDialog = byId("publishDialog");
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -164,35 +189,235 @@
     showNotice(successMessage, "success");
   }
 
-  function resetCharacterForm() {
+  function nextPatchVersion(version) {
+    const parts = String(version || "").split(".").map(Number);
+    if (parts.length !== 3 || parts.some((value) => !Number.isInteger(value) || value < 0)) return "-";
+    return `${parts[0]}.${parts[1]}.${parts[2] + 1}`;
+  }
+
+  function switchWorkspace(workspace) {
+    state.activeWorkspace = workspace === "sales" ? "sales" : "characters";
+    document.querySelectorAll("[data-workspace-tab]").forEach((button) => {
+      button.setAttribute("aria-selected", String(button.dataset.workspaceTab === state.activeWorkspace));
+    });
+    byId("characterWorkspace").hidden = state.activeWorkspace !== "characters";
+    byId("salesWorkspace").hidden = state.activeWorkspace !== "sales";
+  }
+
+  function switchEditorTab(tab) {
+    state.activeEditorTab = ["basic", "images", "audio", "preview"].includes(tab) ? tab : "basic";
+    document.querySelectorAll("[data-editor-tab]").forEach((button) => {
+      button.setAttribute("aria-selected", String(button.dataset.editorTab === state.activeEditorTab));
+    });
+    document.querySelectorAll("[data-editor-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.editorPanel !== state.activeEditorTab;
+    });
+    if (state.activeEditorTab === "preview") renderPreview();
+  }
+
+  function revokeAsset(asset) {
+    if (asset?.url) URL.revokeObjectURL(asset.url);
+  }
+
+  function clearEditorAssets() {
+    state.imageAssets = new Map();
+    state.audioAssets = new Map();
+    state.thumbnailAsset = null;
+    if (state.playingAudio) {
+      state.playingAudio.pause();
+      state.playingAudio = null;
+    }
+  }
+
+  function currentDraftKey() {
+    return byId("characterId").value.trim().toLowerCase() || state.editingCharacterId || "__new__";
+  }
+
+  function captureCharacterDraft() {
+    const key = currentDraftKey();
+    state.characterDrafts.set(key, {
+      description: byId("characterDescription").value,
+      thumbnail: state.thumbnailAsset,
+      images: new Map(state.imageAssets),
+      audio: new Map(state.audioAssets),
+    });
+  }
+
+  function loadCharacterDraft(characterId) {
+    const draft = state.characterDrafts.get(characterId || "__new__");
+    state.thumbnailAsset = draft?.thumbnail || null;
+    state.imageAssets = new Map(draft?.images || []);
+    state.audioAssets = new Map(draft?.audio || []);
+    byId("characterDescription").value = draft?.description || "";
+  }
+
+  function updateEditorHeading(character = null) {
+    const status = character?.status || byId("characterStatus").value || "DRAFT";
+    const [label, tone] = statusMeta(status);
+    byId("editorEyebrow").textContent = character ? "EDIT CHARACTER" : "NEW CHARACTER";
+    byId("editorTitle").textContent = character ? `${character.name} 편집` : "새 캐릭터 제작";
+    byId("editorSubtitle").textContent = character
+      ? `${character.id} · 최근 수정 ${formatDateTime(character.updated_at)}`
+      : "기본정보부터 입력해 주세요.";
+    byId("editorStatusBadge").textContent = label;
+    byId("editorStatusBadge").dataset.tone = tone;
+    byId("characterDraftMessage").textContent = character
+      ? "기본정보가 서버에 저장된 캐릭터입니다."
+      : "아직 저장되지 않은 캐릭터입니다.";
+  }
+
+  function renderThumbnail() {
+    const preview = byId("thumbnailPreview");
+    if (!state.thumbnailAsset) {
+      preview.innerHTML = "<span>대표 이미지</span>";
+      return;
+    }
+    preview.innerHTML = `<img src="${escapeHtml(state.thumbnailAsset.url)}" alt="대표 이미지 미리보기">`;
+  }
+
+  function renderImageSlots() {
+    byId("characterImageSlots").innerHTML = CHARACTER_ACTIONS.map((action) => {
+      const asset = state.imageAssets.get(action.id);
+      return `
+        <article class="todo-asset-card" data-required="${Boolean(action.required)}">
+          <div class="todo-asset-preview" data-image-preview="${escapeHtml(action.id)}">
+            ${asset ? `<img src="${escapeHtml(asset.url)}" alt="${escapeHtml(action.label)} 이미지 미리보기">` : "이미지 없음"}
+          </div>
+          <strong>${escapeHtml(action.label)}${action.required ? " · 필수" : ""}</strong>
+          <p>${escapeHtml(action.description)}</p>
+          <label class="todo-file-button">
+            ${asset ? "파일 교체" : "이미지 선택"}
+            <input type="file" accept=".png,.gif,image/png,image/gif" data-image-input="${escapeHtml(action.id)}">
+          </label>
+          <span class="todo-asset-file-name">${escapeHtml(asset?.file?.name || "선택된 파일 없음")}</span>
+        </article>
+      `;
+    }).join("");
+    byId("imageProgress").textContent = `${state.imageAssets.size} / ${CHARACTER_ACTIONS.length}`;
+  }
+
+  function renderAudioSlots() {
+    byId("characterAudioSlots").innerHTML = AUDIO_ACTIONS.map((action) => {
+      const asset = state.audioAssets.get(action.id);
+      return `
+        <article class="todo-audio-row">
+          <div class="todo-audio-label">
+            <strong>${escapeHtml(action.label)}</strong>
+            <span>${escapeHtml(action.description)}</span>
+          </div>
+          <span class="todo-audio-file">${escapeHtml(asset?.file?.name || "연결된 음성 없음")}</span>
+          <div class="todo-audio-actions">
+            <label class="todo-file-button">
+              ${asset ? "교체" : "파일 선택"}
+              <input type="file" accept=".wav,.flac,audio/wav,audio/flac" data-audio-input="${escapeHtml(action.id)}">
+            </label>
+            <button class="todo-button todo-button-secondary todo-button-small" type="button" data-play-audio="${escapeHtml(action.id)}"${asset ? "" : " disabled"}>재생</button>
+            <button class="todo-button todo-button-ghost todo-button-small" type="button" data-remove-audio="${escapeHtml(action.id)}"${asset ? "" : " disabled"}>삭제</button>
+          </div>
+        </article>
+      `;
+    }).join("");
+    byId("audioProgress").textContent = `${state.audioAssets.size} / ${AUDIO_ACTIONS.length}`;
+  }
+
+  function renderPreviewButtons() {
+    byId("previewActionButtons").innerHTML = CHARACTER_ACTIONS.map((action) => `
+      <button type="button" data-preview-action="${escapeHtml(action.id)}" aria-selected="${state.previewAction === action.id}">${escapeHtml(action.label)}</button>
+    `).join("");
+  }
+
+  function resolvedImageAsset(actionId) {
+    return state.imageAssets.get(actionId) || state.imageAssets.get("default") || null;
+  }
+
+  function renderPreview() {
+    renderPreviewButtons();
+    const action = CHARACTER_ACTIONS.find((item) => item.id === state.previewAction) || CHARACTER_ACTIONS[0];
+    const imageAsset = resolvedImageAsset(action.id);
+    const audioAsset = state.audioAssets.get(action.id);
+    byId("previewActionName").textContent = action.label;
+    byId("previewFileName").textContent = imageAsset?.file?.name || "연결된 이미지 없음";
+    byId("previewCanvas").innerHTML = imageAsset
+      ? `<img src="${escapeHtml(imageAsset.url)}" alt="${escapeHtml(action.label)} 캐릭터 미리보기">`
+      : "<span>이미지를 선택하면 여기에 표시됩니다.</span>";
+    byId("previewAudioButton").disabled = !audioAsset;
+  }
+
+  function openCharacterEditor(character = null) {
+    clearEditorAssets();
     characterForm.reset();
-    byId("characterStatus").value = "DRAFT";
-    byId("characterId").readOnly = false;
-    const button = byId("saveCharacterButton");
-    delete button.dataset.label;
-    button.textContent = "캐릭터 저장";
+    state.editingCharacterId = character?.id || "";
+    byId("characterId").value = character?.id || "";
+    byId("characterId").readOnly = Boolean(character);
+    byId("characterName").value = character?.name || "";
+    byId("characterStatus").value = character?.status || "DRAFT";
+    loadCharacterDraft(character?.id || "__new__");
+    state.previewAction = "default";
+    updateEditorHeading(character);
+    renderThumbnail();
+    renderImageSlots();
+    renderAudioSlots();
+    renderPreview();
+    switchEditorTab("basic");
+    byId("characterLibraryScreen").hidden = true;
+    byId("characterEditorScreen").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function backToCharacterLibrary() {
+    captureCharacterDraft();
+    byId("characterEditorScreen").hidden = true;
+    byId("characterLibraryScreen").hidden = false;
+    renderCharacters();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function renderCharacters() {
     const list = byId("characterList");
-    byId("characterCount").textContent = `${state.characters.length}개`;
-    if (!state.characters.length) {
-      list.innerHTML = '<p class="todo-empty">등록된 판매 캐릭터가 없습니다.</p>';
+    const query = byId("characterSearchInput").value.trim().toLowerCase();
+    const status = byId("characterStatusFilter").value;
+    const filtered = state.characters.filter((character) => {
+      const matchesQuery = !query || `${character.id} ${character.name}`.toLowerCase().includes(query);
+      return matchesQuery && (!status || character.status === status);
+    });
+    byId("characterCount").textContent = filtered.length === state.characters.length
+      ? `${state.characters.length}개`
+      : `${filtered.length} / ${state.characters.length}개`;
+    if (!filtered.length) {
+      list.innerHTML = `
+        <div class="todo-library-empty">
+          <div>
+            <div class="todo-library-empty-mark">✦</div>
+            <h3>${state.characters.length ? "조건에 맞는 캐릭터가 없습니다." : "첫 캐릭터를 만들어 보세요."}</h3>
+            <p>${state.characters.length ? "검색어나 상태 필터를 바꿔 주세요." : "기본정보와 상황별 이미지·음성을 한 화면에서 구성할 수 있습니다."}</p>
+            <button class="todo-button todo-button-primary" type="button" data-new-character>+ 새 캐릭터</button>
+          </div>
+        </div>
+      `;
       refreshCharacterSelects();
       return;
     }
-    list.innerHTML = state.characters.map((character, index) => `
-      <div class="todo-mini-item">
-        <div>
-          <span class="todo-mini-name">${escapeHtml(character.name)}</span>
-          <span class="todo-mini-id">${escapeHtml(character.id)}</span>
-        </div>
-        <div class="todo-mini-actions">
-          ${statusBadge(character.status)}
-          <button class="todo-button todo-button-ghost todo-button-small" type="button" data-edit-character="${index}">편집</button>
-        </div>
-      </div>
-    `).join("");
+    list.innerHTML = filtered.map((character) => {
+      const originalIndex = state.characters.indexOf(character);
+      const draft = state.characterDrafts.get(character.id);
+      const versionText = character.status === "PUBLISHED" ? `앱 v${CURRENT_APP_VERSION}` : character.status === "ARCHIVED" ? "판매 종료" : "게시 전";
+      return `
+        <article class="todo-character-card">
+          <div class="todo-character-thumb">
+            ${draft?.thumbnail ? `<img src="${escapeHtml(draft.thumbnail.url)}" alt="${escapeHtml(character.name)} 썸네일">` : "대표 이미지 없음"}
+          </div>
+          <div class="todo-character-card-body">
+            <div class="todo-character-card-title">
+              <strong>${escapeHtml(character.name)}</strong>
+              ${statusBadge(character.status)}
+            </div>
+            <p class="todo-character-card-id">${escapeHtml(character.id)}</p>
+            <p class="todo-character-card-meta">${escapeHtml(versionText)}<br>수정 ${escapeHtml(formatDateTime(character.updated_at))}</p>
+            <button class="todo-button todo-button-secondary" type="button" data-edit-character="${originalIndex}">${character.status === "DRAFT" ? "계속 제작" : "편집"}</button>
+          </div>
+        </article>
+      `;
+    }).join("");
     refreshCharacterSelects();
   }
 
@@ -484,9 +709,14 @@
     setButtonBusy(button, true, "저장 중…");
     try {
       await api("/v1/todo/characters", { method: "POST", body: payload });
+      captureCharacterDraft();
       await loadCharacters();
-      resetCharacterForm();
-      showNotice("판매 캐릭터 정보를 저장했습니다.", "success");
+      state.editingCharacterId = payload.id;
+      idInput.readOnly = true;
+      const savedCharacter = state.characters.find((character) => character.id === payload.id) || payload;
+      updateEditorHeading(savedCharacter);
+      byId("characterDraftMessage").textContent = "기본정보를 저장했습니다. 이미지·음원은 현재 브라우저에서만 유지됩니다.";
+      showNotice("캐릭터 기본정보를 저장했습니다.", "success");
     } catch (error) {
       showNotice(error.message, "error", true);
     } finally {
@@ -495,20 +725,147 @@
   });
 
   byId("characterList").addEventListener("click", (event) => {
+    if (event.target.closest("[data-new-character]")) {
+      openCharacterEditor();
+      return;
+    }
     const button = event.target.closest("[data-edit-character]");
     if (!button) return;
     const character = state.characters[numberValue(button.dataset.editCharacter)];
     if (!character) return;
-    byId("characterId").value = character.id;
-    byId("characterId").readOnly = true;
-    byId("characterName").value = character.name;
-    byId("characterStatus").value = character.status;
-    byId("saveCharacterButton").textContent = "변경 저장";
-    characterForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    openCharacterEditor(character);
   });
 
-  byId("resetCharacterButton").addEventListener("click", resetCharacterForm);
+  document.querySelectorAll("[data-workspace-tab]").forEach((button) => {
+    button.addEventListener("click", () => switchWorkspace(button.dataset.workspaceTab));
+  });
+  document.querySelectorAll("[data-editor-tab]").forEach((button) => {
+    button.addEventListener("click", () => switchEditorTab(button.dataset.editorTab));
+  });
+  byId("newCharacterButton").addEventListener("click", () => openCharacterEditor());
+  byId("backToCharactersButton").addEventListener("click", backToCharacterLibrary);
+  byId("characterSearchInput").addEventListener("input", renderCharacters);
+  byId("characterStatusFilter").addEventListener("change", renderCharacters);
   byId("characterId").addEventListener("blur", (event) => { event.target.value = event.target.value.trim().toLowerCase(); });
+  byId("characterStatus").addEventListener("change", () => {
+    const current = state.characters.find((character) => character.id === state.editingCharacterId);
+    updateEditorHeading(current ? { ...current, status: byId("characterStatus").value } : null);
+  });
+
+  byId("thumbnailInput").addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!/\.(png|gif)$/i.test(file.name)) {
+      showNotice("대표 이미지는 PNG 또는 GIF만 사용할 수 있습니다.", "error", true);
+      event.target.value = "";
+      return;
+    }
+    revokeAsset(state.thumbnailAsset);
+    state.thumbnailAsset = { file, url: URL.createObjectURL(file) };
+    renderThumbnail();
+  });
+
+  byId("characterImageSlots").addEventListener("change", (event) => {
+    const input = event.target.closest("[data-image-input]");
+    const file = input?.files?.[0];
+    if (!input || !file) return;
+    if (!/\.(png|gif)$/i.test(file.name)) {
+      showNotice("상황별 이미지는 PNG 또는 GIF만 사용할 수 있습니다.", "error", true);
+      input.value = "";
+      return;
+    }
+    revokeAsset(state.imageAssets.get(input.dataset.imageInput));
+    state.imageAssets.set(input.dataset.imageInput, { file, url: URL.createObjectURL(file) });
+    renderImageSlots();
+    renderPreview();
+  });
+
+  byId("characterAudioSlots").addEventListener("change", (event) => {
+    const input = event.target.closest("[data-audio-input]");
+    const file = input?.files?.[0];
+    if (!input || !file) return;
+    if (!/\.(wav|flac)$/i.test(file.name)) {
+      showNotice("음성 파일은 WAV 또는 FLAC만 사용할 수 있습니다.", "error", true);
+      input.value = "";
+      return;
+    }
+    revokeAsset(state.audioAssets.get(input.dataset.audioInput));
+    state.audioAssets.set(input.dataset.audioInput, { file, url: URL.createObjectURL(file) });
+    renderAudioSlots();
+    renderPreview();
+  });
+
+  byId("characterAudioSlots").addEventListener("click", (event) => {
+    const playButton = event.target.closest("[data-play-audio]");
+    const removeButton = event.target.closest("[data-remove-audio]");
+    if (playButton) {
+      const asset = state.audioAssets.get(playButton.dataset.playAudio);
+      if (!asset) return;
+      if (state.playingAudio) state.playingAudio.pause();
+      state.playingAudio = new Audio(asset.url);
+      state.playingAudio.play().catch(() => showNotice("브라우저에서 음성을 재생하지 못했습니다.", "error"));
+      return;
+    }
+    if (removeButton) {
+      const actionId = removeButton.dataset.removeAudio;
+      revokeAsset(state.audioAssets.get(actionId));
+      state.audioAssets.delete(actionId);
+      renderAudioSlots();
+      renderPreview();
+    }
+  });
+
+  byId("previewActionButtons").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-preview-action]");
+    if (!button) return;
+    state.previewAction = button.dataset.previewAction;
+    renderPreview();
+  });
+
+  byId("previewAudioButton").addEventListener("click", () => {
+    const asset = state.audioAssets.get(state.previewAction);
+    if (!asset) return;
+    if (state.playingAudio) state.playingAudio.pause();
+    state.playingAudio = new Audio(asset.url);
+    state.playingAudio.play().catch(() => showNotice("브라우저에서 음성을 재생하지 못했습니다.", "error"));
+  });
+
+  function validateCharacter() {
+    const errors = [];
+    const id = byId("characterId").value.trim().toLowerCase();
+    const name = byId("characterName").value.trim();
+    if (!/^[a-z0-9][a-z0-9_-]{1,63}$/.test(id)) errors.push("캐릭터 ID 형식을 확인해 주세요.");
+    if (!name) errors.push("표시 이름을 입력해 주세요.");
+    if (!state.imageAssets.has("default")) errors.push("필수 기본 이미지를 등록해 주세요.");
+    return errors;
+  }
+
+  function renderValidationResult(target, errors) {
+    target.dataset.valid = String(errors.length === 0);
+    target.innerHTML = errors.length
+      ? `<strong>게시 전 확인이 필요합니다.</strong><ul>${errors.map((error) => `<li>${escapeHtml(error)}</li>`).join("")}</ul>`
+      : "<strong>게시 검증을 통과했습니다.</strong><br>기본정보와 필수 이미지가 준비되었습니다.";
+  }
+
+  byId("validateCharacterButton").addEventListener("click", () => {
+    const errors = validateCharacter();
+    showNotice(errors.length ? `게시 전 ${errors.length}개 항목을 확인해 주세요.` : "게시 검증을 통과했습니다.", errors.length ? "error" : "success", Boolean(errors.length));
+    if (errors.some((error) => error.includes("기본 이미지"))) switchEditorTab("images");
+    else if (errors.length) switchEditorTab("basic");
+  });
+
+  function openPublishDialog() {
+    const errors = validateCharacter();
+    byId("currentAppVersion").value = CURRENT_APP_VERSION;
+    byId("nextAppVersion").value = nextPatchVersion(CURRENT_APP_VERSION);
+    byId("publishLogInput").value = "";
+    renderValidationResult(byId("publishValidationResult"), errors);
+    publishDialog.showModal();
+  }
+
+  byId("openPublishButton").addEventListener("click", openPublishDialog);
+  byId("closePublishButton").addEventListener("click", () => publishDialog.close());
+  byId("cancelPublishButton").addEventListener("click", () => publishDialog.close());
   byId("addOrderItemButton").addEventListener("click", () => addOrderItem());
 
   byId("orderItems").addEventListener("click", (event) => {

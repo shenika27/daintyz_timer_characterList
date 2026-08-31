@@ -26,6 +26,46 @@ test("todo-builder가 판매 캐릭터·최초 발급·발급 원장 화면을 �
   assert.match(html, /todo-builder\.js/);
 });
 
+test("캐릭터 제작·관리와 주문·코드를 전체 폭 작업 화면으로 분리한다", () => {
+  const html = read("docs/todo-builder/index.html");
+  assert.match(html, /data-workspace-tab="characters"/);
+  assert.match(html, /data-workspace-tab="sales"/);
+  assert.match(html, /id="characterLibraryScreen"/);
+  assert.match(html, /id="characterEditorScreen"/);
+  assert.match(html, /id="salesWorkspace"[^>]*hidden/);
+  assert.doesNotMatch(html, /class="todo-layout"/);
+});
+
+test("캐릭터 편집기가 기본정보·이미지·음성·미리보기 단계를 제공한다", () => {
+  const html = read("docs/todo-builder/index.html");
+  for (const tab of ["basic", "images", "audio", "preview"]) {
+    assert.match(html, new RegExp(`data-editor-tab="${tab}"`));
+    assert.match(html, new RegExp(`data-editor-panel="${tab}"`));
+  }
+  for (const id of [
+    "characterImageSlots",
+    "characterAudioSlots",
+    "previewActionButtons",
+    "previewCanvas",
+    "publishDialog",
+    "publishLogInput",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+});
+
+test("실제 PC 앱 액션과 패치 버전 게시 UI를 사용한다", () => {
+  const html = read("docs/todo-builder/index.html");
+  const source = read("docs/todo-builder/todo-builder.js");
+  for (const action of ["default", "overdue", "delete", "idle", "done", "add", "work", "pause", "timer_done", "open", "closed"]) {
+    assert.match(source, new RegExp(`id: "${action}"`));
+  }
+  assert.match(source, /const CURRENT_APP_VERSION = "0\.6\.7"/);
+  assert.match(source, /parts\[2\] \+ 1/);
+  assert.match(html, /id="nextAppVersion"[^>]*readonly/);
+  assert.match(html, /id="confirmPublishButton" disabled/);
+});
+
 test("발급 횟수 이력과 재발급·폐기·환불 대화상자를 제공한다", () => {
   const html = read("docs/todo-builder/index.html");
   assert.match(html, /id="historyDialog"/);
