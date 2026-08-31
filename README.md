@@ -17,7 +17,10 @@
 ## 리포 구조
 
 ```
-docs/index.html                 ← 🎨 로그인 기반 스킨빌더 (자동 업로드/수동 zip 생성)
+docs/index.html                 ← 🔐 공용 로그인 + 빌더 선택 허브
+docs/timer-builder/index.html   ← 🎨 Android 타이머 위젯 빌더
+docs/todo-builder/index.html    ← ✅ PC CharacterTodo 빌더
+docs/shared/                    ← 공용 로그인 클라이언트와 상단 전환 UI
 _inbox/                         ← 빌더가 올린 번들/마커 처리함 (Action이 처리 후 비움)
 .github/workflows/skin-deploy.yml ← _inbox 번들 자동 배치 워크플로
 scripts/apply-skin-bundle.mjs   ← 번들 풀기 + catalog 병합 스크립트
@@ -439,10 +442,11 @@ character/                      ← 테마 에셋 묶음
 
 git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 한 번**이면 `_inbox` 커밋부터 배치까지 자동으로 처리됩니다.
 
-1. 배포된 **스킨빌더**(`https://shenika27.github.io/daintyz_timer_characterList/`) 열기
-2. 운영자가 발급한 아이디와 비밀번호로 로그인
+1. 배포된 **빌더 허브**(`https://shenika27.github.io/daintyz_timer_characterList/`) 열기
+2. 운영자가 발급한 아이디와 비밀번호로 로그인한 뒤 **타이머 위젯** 선택
    - `자동로그인(30일)`을 선택하면 브라우저를 닫았다 열어도 로그인 상태가 유지됩니다.
    - 비밀번호와 세션 토큰은 Web Storage에 저장하지 않고 HttpOnly 쿠키로 관리합니다.
+   - 로그인 후에는 상단 전환 메뉴에서 `timer-builder`와 `todo-builder`를 오갈 수 있습니다.
 3. 캐릭터 상태별 이미지 + 타이머 배경/버튼/폰트 + **썸네일·미리보기** + 기본정보(이름·가격·부제·출시일) 입력
    - 영어 이름/설명(`localized.en`)을 넣으면 앱 언어가 English일 때 해당 문구가 우선 표시됩니다.
    - `상점에 노출 안 함(숨김)`은 catalog에는 남기되 상점 노출만 숨길 때 씁니다.

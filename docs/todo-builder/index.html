@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CharacterTodo 캐릭터 및 판매 코드 관리 빌더">
+  <title>todo-builder | daintyz builder</title>
+  <link rel="stylesheet" href="../shared/builder-shell.css">
+</head>
+<body class="builder-shell">
+  <header class="builder-topbar">
+    <a class="builder-brand" href="../">daintyz builder</a>
+    <nav class="builder-switcher" aria-label="빌더 전환">
+      <a href="../timer-builder/">타이머 위젯</a>
+      <a href="./" aria-current="page">CharacterTodo</a>
+    </nav>
+    <div class="builder-account">
+      <span id="authUsername">확인 중…</span>
+      <button class="builder-logout" type="button" id="logoutButton">로그아웃</button>
+    </div>
+  </header>
+
+  <main class="builder-page">
+    <section class="builder-hero">
+      <p class="builder-eyebrow">TODO-BUILDER</p>
+      <h1>CharacterTodo 빌더</h1>
+      <p>PC 앱용 캐릭터 테마와 판매 코드를 관리하는 공간입니다.</p>
+    </section>
+
+    <section class="builder-placeholder">
+      <h2>1단계 사이트 연결이 완료되었습니다.</h2>
+      <p>코드 발급과 캐릭터 제작 기능은 다음 단계부터 이 화면에 순서대로 추가됩니다.</p>
+    </section>
+  </main>
+
+  <script src="../shared/builder-auth.js"></script>
+  <script>
+    async function initialize() {
+      BuilderAuth.clearLegacyStorage();
+      try {
+        const { response, data } = await BuilderAuth.session();
+        if (response.ok && data.ok) {
+          document.getElementById("authUsername").textContent = `${data.username}님`;
+          return;
+        }
+      } catch {}
+      window.location.replace("../?next=todo-builder");
+    }
+
+    document.getElementById("logoutButton").addEventListener("click", async () => {
+      await BuilderAuth.logout();
+      window.location.replace("../");
+    });
+
+    initialize();
+  </script>
+</body>
+</html>
