@@ -6,6 +6,7 @@
   <meta name="description" content="CharacterTodo 캐릭터 및 판매 코드 관리 빌더">
   <title>todo-builder | daintyz builder</title>
   <link rel="stylesheet" href="../shared/builder-shell.css">
+  <link rel="stylesheet" href="./todo-builder.css">
 </head>
 <body class="builder-shell">
   <header class="builder-topbar">
@@ -20,39 +21,186 @@
     </div>
   </header>
 
-  <main class="builder-page">
-    <section class="builder-hero">
-      <p class="builder-eyebrow">TODO-BUILDER</p>
-      <h1>CharacterTodo 빌더</h1>
-      <p>PC 앱용 캐릭터 테마와 판매 코드를 관리하는 공간입니다.</p>
+  <main class="builder-page todo-page">
+    <section class="builder-hero todo-hero">
+      <div>
+        <p class="builder-eyebrow">TODO-BUILDER</p>
+        <h1>CharacterTodo 판매 관리</h1>
+        <p>판매 캐릭터를 등록하고 주문별 코드를 발급·재발급·폐기·환불합니다.</p>
+      </div>
+      <button class="todo-button todo-button-secondary" type="button" id="refreshAllButton">전체 새로고침</button>
     </section>
 
-    <section class="builder-placeholder">
-      <h2>1단계 사이트 연결이 완료되었습니다.</h2>
-      <p>코드 발급과 캐릭터 제작 기능은 다음 단계부터 이 화면에 순서대로 추가됩니다.</p>
+    <div class="todo-notice" id="pageNotice" role="status" aria-live="polite" hidden></div>
+
+    <section class="todo-layout" aria-label="판매 코드 발급 도구">
+      <article class="todo-card">
+        <div class="todo-section-heading">
+          <div>
+            <p class="todo-kicker">판매 대상</p>
+            <h2>캐릭터 관리</h2>
+          </div>
+          <span class="todo-count" id="characterCount">0개</span>
+        </div>
+
+        <form id="characterForm" class="todo-form">
+          <label>
+            캐릭터 ID
+            <input id="characterId" name="characterId" type="text" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{1,63}" placeholder="예: potato_01" required>
+          </label>
+          <label>
+            표시 이름
+            <input id="characterName" name="characterName" type="text" maxlength="100" placeholder="예: 감자" required>
+          </label>
+          <label>
+            판매 상태
+            <select id="characterStatus" name="characterStatus">
+              <option value="DRAFT">준비 중</option>
+              <option value="PUBLISHED">판매 중</option>
+              <option value="ARCHIVED">판매 종료</option>
+            </select>
+          </label>
+          <div class="todo-form-actions">
+            <button class="todo-button todo-button-primary" type="submit" id="saveCharacterButton">캐릭터 저장</button>
+            <button class="todo-button todo-button-ghost" type="button" id="resetCharacterButton">입력 초기화</button>
+          </div>
+          <p class="todo-help">판매 코드 발급에는 ‘판매 중’ 캐릭터만 사용할 수 있습니다.</p>
+        </form>
+
+        <div class="todo-mini-list" id="characterList" aria-live="polite"></div>
+      </article>
+
+      <article class="todo-card todo-card-wide">
+        <div class="todo-section-heading">
+          <div>
+            <p class="todo-kicker">신규 주문</p>
+            <h2>최초 코드 발급</h2>
+          </div>
+        </div>
+
+        <form id="orderForm" class="todo-form">
+          <div class="todo-form-grid">
+            <label>
+              네이버 주문번호
+              <input id="externalOrderId" name="externalOrderId" type="text" maxlength="100" placeholder="외부 주문번호" required>
+            </label>
+            <label>
+              구매자 이메일
+              <input id="buyerEmail" name="buyerEmail" type="email" maxlength="254" placeholder="buyer@example.com" required>
+            </label>
+          </div>
+
+          <div class="todo-subheading">
+            <h3>주문 상품</h3>
+            <button class="todo-button todo-button-ghost todo-button-small" type="button" id="addOrderItemButton">상품 추가</button>
+          </div>
+          <div id="orderItems" class="todo-order-items"></div>
+
+          <div class="todo-form-actions">
+            <button class="todo-button todo-button-primary" type="submit" id="issueOrderButton">코드 발급</button>
+          </div>
+          <p class="todo-help">발급된 전체 코드는 결과 화면에서 확인·복사할 수 있습니다. 이메일 자동 발송은 아직 연결하지 않습니다.</p>
+        </form>
+
+        <section class="todo-code-result" id="initialCodeResult" aria-live="polite" hidden>
+          <div class="todo-subheading">
+            <div>
+              <p class="todo-kicker">발급 완료</p>
+              <h3 id="initialCodeTitle">신규 코드</h3>
+            </div>
+            <button class="todo-button todo-button-secondary todo-button-small" type="button" id="copyAllCodesButton">전체 복사</button>
+          </div>
+          <div id="initialCodeList" class="todo-code-list"></div>
+          <p class="todo-help">코드 원문은 발급·재발급 응답에서만 운영 화면에 표시됩니다.</p>
+        </section>
+      </article>
+    </section>
+
+    <section class="todo-card todo-orders-card">
+      <div class="todo-section-heading todo-orders-heading">
+        <div>
+          <p class="todo-kicker">발급 원장</p>
+          <h2>주문·코드 목록</h2>
+        </div>
+        <form id="orderSearchForm" class="todo-search" role="search">
+          <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
+          <input id="orderSearchInput" type="search" maxlength="100" placeholder="주문번호·이메일·캐릭터 검색">
+          <button class="todo-button todo-button-secondary" type="submit">검색</button>
+          <button class="todo-button todo-button-ghost" type="button" id="refreshOrdersButton">새로고침</button>
+        </form>
+      </div>
+
+      <div class="todo-table-wrap">
+        <table class="todo-table">
+          <thead>
+            <tr>
+              <th scope="col">주문</th>
+              <th scope="col">구매자</th>
+              <th scope="col">캐릭터</th>
+              <th scope="col">수량</th>
+              <th scope="col">발급 횟수</th>
+              <th scope="col">상태</th>
+              <th scope="col">발급일</th>
+            </tr>
+          </thead>
+          <tbody id="orderTableBody"></tbody>
+        </table>
+        <p class="todo-empty" id="orderEmpty" hidden>조회된 발급 내역이 없습니다.</p>
+      </div>
     </section>
   </main>
 
+  <dialog class="todo-dialog todo-history-dialog" id="historyDialog" aria-labelledby="historyTitle">
+    <div class="todo-dialog-header">
+      <div>
+        <p class="todo-kicker">발급 이력</p>
+        <h2 id="historyTitle">코드 발급 이력</h2>
+        <p id="historySummary" class="todo-dialog-summary"></p>
+      </div>
+      <button class="todo-icon-button" type="button" id="closeHistoryButton" aria-label="발급 이력 닫기">×</button>
+    </div>
+    <div class="todo-dialog-body" id="historyBody"></div>
+  </dialog>
+
+  <dialog class="todo-dialog todo-reason-dialog" id="reasonDialog" aria-labelledby="reasonTitle">
+    <form id="reasonForm">
+      <div class="todo-dialog-header">
+        <div>
+          <p class="todo-kicker">운영 작업</p>
+          <h2 id="reasonTitle">사유 입력</h2>
+          <p id="reasonDescription" class="todo-dialog-summary"></p>
+        </div>
+        <button class="todo-icon-button" type="button" id="closeReasonButton" aria-label="작업 취소">×</button>
+      </div>
+      <div class="todo-dialog-body">
+        <label>
+          처리 사유
+          <textarea id="reasonInput" maxlength="200" rows="4" required></textarea>
+        </label>
+        <div class="todo-form-actions todo-dialog-actions">
+          <button class="todo-button todo-button-ghost" type="button" id="cancelReasonButton">취소</button>
+          <button class="todo-button todo-button-danger" type="submit" id="confirmReasonButton">처리</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="todo-dialog todo-code-dialog" id="codeDialog" aria-labelledby="codeDialogTitle">
+    <div class="todo-dialog-header">
+      <div>
+        <p class="todo-kicker">재발급 완료</p>
+        <h2 id="codeDialogTitle">새 코드</h2>
+        <p class="todo-dialog-summary">기존 코드는 폐기되었으며 아래 코드가 최신 활성 코드입니다.</p>
+      </div>
+      <button class="todo-icon-button" type="button" id="closeCodeButton" aria-label="새 코드 닫기">×</button>
+    </div>
+    <div class="todo-dialog-body">
+      <div class="todo-single-code" id="reissuedCode"></div>
+      <button class="todo-button todo-button-primary" type="button" id="copyReissuedCodeButton">새 코드 복사</button>
+    </div>
+  </dialog>
+
   <script src="../shared/builder-auth.js"></script>
-  <script>
-    async function initialize() {
-      BuilderAuth.clearLegacyStorage();
-      try {
-        const { response, data } = await BuilderAuth.session();
-        if (response.ok && data.ok) {
-          document.getElementById("authUsername").textContent = `${data.username}님`;
-          return;
-        }
-      } catch {}
-      window.location.replace("../?next=todo-builder");
-    }
-
-    document.getElementById("logoutButton").addEventListener("click", async () => {
-      await BuilderAuth.logout();
-      window.location.replace("../");
-    });
-
-    initialize();
-  </script>
+  <script src="./todo-builder.js"></script>
 </body>
 </html>
