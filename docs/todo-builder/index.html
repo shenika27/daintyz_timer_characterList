@@ -34,6 +34,7 @@
     <nav class="todo-workspace-tabs" aria-label="CharacterTodo 작업 선택">
       <button type="button" data-workspace-tab="characters" aria-selected="true">캐릭터 제작·관리</button>
       <button type="button" data-workspace-tab="sales" aria-selected="false">주문·코드</button>
+      <button type="button" data-workspace-tab="publications" aria-selected="false">게시 이력</button>
     </nav>
 
     <div class="todo-notice" id="pageNotice" role="status" aria-live="polite" hidden></div>
@@ -281,6 +282,36 @@
         </div>
       </section>
     </section>
+
+    <section id="publicationWorkspace" class="todo-workspace" aria-label="게시 이력" hidden>
+      <section class="todo-card todo-orders-card">
+        <div class="todo-section-heading todo-orders-heading">
+          <div>
+            <p class="todo-kicker">APP RELEASE HISTORY</p>
+            <h2>게시 이력</h2>
+            <p>캐릭터가 포함된 앱 버전과 GitHub 반영 결과를 확인합니다.</p>
+          </div>
+          <button class="todo-button todo-button-secondary" type="button" id="refreshPublicationsButton">새로고침</button>
+        </div>
+        <div class="todo-table-wrap">
+          <table class="todo-table">
+            <thead>
+              <tr>
+                <th scope="col">버전</th>
+                <th scope="col">캐릭터</th>
+                <th scope="col">상태</th>
+                <th scope="col">업데이트 로그</th>
+                <th scope="col">게시자</th>
+                <th scope="col">게시 시각</th>
+                <th scope="col">커밋</th>
+              </tr>
+            </thead>
+            <tbody id="publicationTableBody"></tbody>
+          </table>
+          <p class="todo-empty" id="publicationEmpty" hidden>게시 이력이 없습니다.</p>
+        </div>
+      </section>
+    </section>
   </main>
 
   <dialog class="todo-dialog todo-publish-dialog" id="publishDialog" aria-labelledby="publishDialogTitle">
@@ -296,11 +327,11 @@
       <div class="todo-version-grid">
         <label>
           현재 앱 버전
-          <input id="currentAppVersion" type="text" value="0.6.7" readonly>
+          <input id="currentAppVersion" type="text" value="조회 중…" readonly>
         </label>
         <label>
           게시 예정 버전
-          <input id="nextAppVersion" type="text" value="0.6.8" readonly>
+          <input id="nextAppVersion" type="text" value="조회 중…" readonly>
         </label>
       </div>
       <label>
@@ -310,7 +341,7 @@
       <div class="todo-validation-box" id="publishValidationResult"></div>
       <div class="todo-dialog-actions todo-form-actions">
         <button class="todo-button todo-button-ghost" type="button" id="cancelPublishButton">취소</button>
-        <button class="todo-button todo-button-primary" type="button" id="confirmPublishButton" disabled>게시 자동화 연결 전</button>
+        <button class="todo-button todo-button-primary" type="button" id="confirmPublishButton" disabled>앱에 게시</button>
       </div>
       <p class="todo-help">예정 버전은 현재 버전의 패치 번호를 자동으로 1 증가시키며 직접 수정할 수 없습니다.</p>
     </div>

@@ -14,6 +14,13 @@
     REPLACED: ["교체됨", "warning"],
     REVOKED: ["폐기", "danger"],
     SUPERSEDED: ["승계됨", "warning"],
+    PUBLISHING: ["진행 중", "info"],
+    SUCCEEDED: ["게시 완료", "active"],
+    FAILED: ["실패", "danger"],
+    SOURCE_COMMITTED: ["빌드 대기", "info"],
+    BUILDING: ["빌드 중", "info"],
+    RELEASED: ["배포 완료", "active"],
+    BUILD_FAILED: ["빌드 실패", "danger"],
   });
   const ACTION_META = Object.freeze({
     reissue: {
@@ -49,8 +56,6 @@
     { id: "closed", label: "목록 닫힘", description: "할일 목록을 닫을 때" },
   ]);
   const AUDIO_ACTIONS = Object.freeze(CHARACTER_ACTIONS.filter((action) => action.id !== "default"));
-  const CURRENT_APP_VERSION = "0.6.7";
-
   const state = {
     characters: [],
     entries: [],
@@ -71,6 +76,10 @@
     currentDraftRevision: null,
     previewAction: "default",
     playingAudio: null,
+    publications: [],
+    currentAppVersion: "",
+    nextAppVersion: "",
+    publishRequestId: "",
   };
 
   const byId = (id) => document.getElementById(id);
@@ -194,19 +203,14 @@
     showNotice(successMessage, "success");
   }
 
-  function nextPatchVersion(version) {
-    const parts = String(version || "").split(".").map(Number);
-    if (parts.length !== 3 || parts.some((value) => !Number.isInteger(value) || value < 0)) return "-";
-    return `${parts[0]}.${parts[1]}.${parts[2] + 1}`;
-  }
-
   function switchWorkspace(workspace) {
-    state.activeWorkspace = workspace === "sales" ? "sales" : "characters";
+    state.activeWorkspace = ["characters", "sales", "publications"].includes(workspace) ? workspace : "characters";
     document.querySelectorAll("[data-workspace-tab]").forEach((button) => {
       button.setAttribute("aria-selected", String(button.dataset.workspaceTab === state.activeWorkspace));
     });
     byId("characterWorkspace").hidden = state.activeWorkspace !== "characters";
     byId("salesWorkspace").hidden = state.activeWorkspace !== "sales";
+    byId("publicationWorkspace").hidden = state.activeWorkspace !== "publications";
   }
 
   function switchEditorTab(tab) {
@@ -296,6 +300,11 @@
     byId("characterDraftMessage").textContent = character
       ? "기본정보가 서버에 저장된 캐릭터입니다."
       : "아직 저장되지 않은 캐릭터입니다.";
+    const historyButton = byId("publishHistoryButton");
+    historyButton.disabled = !character?.published_version;
+    historyButton.textContent = character?.published_version
+      ? `게시 이력 · v${character.published_version}`
+      : "게시 기록 없음";
   }
 
   function renderThumbnail() {
@@ -441,7 +450,9 @@
     list.innerHTML = filtered.map((character) => {
       const originalIndex = state.characters.indexOf(character);
       const draft = state.characterDrafts.get(character.id);
-      const versionText = character.status === "PUBLISHED" ? `앱 v${CURRENT_APP_VERSION}` : character.status === "ARCHIVED" ? "판매 종료" : "게시 전";
+      const versionText = character.published_version
+        ? `앱 v${character.published_version}`
+        : character.status === "ARCHIVED" ? "판매 종료" : "게시 전";
       return `
         <article class="todo-character-card">
           <div class="todo-character-thumb">
@@ -482,6 +493,43 @@
     state.characters = Array.isArray(data.characters) ? data.characters : [];
     state.characters.forEach((character) => state.characterDrafts.set(character.id, draftFromCharacter(character)));
     renderCharacters();
+  }
+
+  function renderPublications() {
+    const body = byId("publicationTableBody");
+    const empty = byId("publicationEmpty");
+    empty.hidden = state.publications.length > 0;
+    body.innerHTML = state.publications.map((entry) => {
+      const commit = entry.commit_sha
+        ? `<code title="${escapeHtml(entry.commit_sha)}">${escapeHtml(String(entry.commit_sha).slice(0, 8))}</code>`
+        : "-";
+      const log = entry.error_message
+        ? `${entry.update_log}\n실패: ${entry.error_message}`
+        : entry.update_log;
+      return `
+        <tr>
+          <td><span class="todo-table-main">v${escapeHtml(entry.target_version)}</span><span class="todo-table-sub">v${escapeHtml(entry.base_version)}에서 증가</span></td>
+          <td><span class="todo-table-main">${escapeHtml(entry.character_name)}</span><span class="todo-table-sub">${escapeHtml(entry.character_id)}</span></td>
+          <td>${statusBadge(entry.release_status || entry.status)}</td>
+          <td><span class="todo-table-main">${escapeHtml(log)}</span></td>
+          <td>${escapeHtml(entry.created_by)}</td>
+          <td>${escapeHtml(formatDateTime(entry.completed_at || entry.created_at))}</td>
+          <td>${entry.workflow_url ? `<a href="${escapeHtml(entry.workflow_url)}" target="_blank" rel="noopener">${commit}</a>` : commit}</td>
+        </tr>`;
+    }).join("");
+  }
+
+  async function loadPublications() {
+    const data = await api("/v1/todo/publications");
+    state.publications = Array.isArray(data.publications) ? data.publications : [];
+    renderPublications();
+  }
+
+  async function loadPublicationPlan() {
+    const data = await api("/v1/todo/publications/plan");
+    state.currentAppVersion = data.currentVersion || "";
+    state.nextAppVersion = data.nextVersion || "";
+    return data;
   }
 
   function updateRemoveButtons() {
@@ -731,7 +779,7 @@
         return;
       }
       byId("authUsername").textContent = `${data.username}님`;
-      await Promise.all([loadCharacters(), loadOrders()]);
+      await Promise.all([loadCharacters(), loadOrders(), loadPublications()]);
     } catch (error) {
       showNotice(error.message || "운영 데이터를 불러오지 못했습니다.", "error", true);
     }
@@ -927,6 +975,12 @@
     if (!/^[a-z0-9][a-z0-9_-]{1,63}$/.test(id)) errors.push("캐릭터 ID 형식을 확인해 주세요.");
     if (!name) errors.push("표시 이름을 입력해 주세요.");
     if (!state.imageAssets.has("default")) errors.push("필수 기본 이미지를 등록해 주세요.");
+    const hasUnsavedFiles = state.thumbnailAsset?.local
+      || [...state.imageAssets.values()].some((asset) => asset.local)
+      || [...state.audioAssets.values()].some((asset) => asset.local);
+    if (!state.editingCharacterId || !state.currentDraftRevision || hasUnsavedFiles) {
+      errors.push("현재 변경사항을 초안 저장한 뒤 게시해 주세요.");
+    }
     return errors;
   }
 
@@ -944,18 +998,78 @@
     else if (errors.length) switchEditorTab("basic");
   });
 
-  function openPublishDialog() {
+  async function openPublishDialog() {
     const errors = validateCharacter();
-    byId("currentAppVersion").value = CURRENT_APP_VERSION;
-    byId("nextAppVersion").value = nextPatchVersion(CURRENT_APP_VERSION);
+    byId("currentAppVersion").value = "조회 중…";
+    byId("nextAppVersion").value = "조회 중…";
     byId("publishLogInput").value = "";
     renderValidationResult(byId("publishValidationResult"), errors);
+    state.publishRequestId = requestId("todo-publish");
+    byId("confirmPublishButton").disabled = true;
     publishDialog.showModal();
+    try {
+      const plan = await loadPublicationPlan();
+      byId("currentAppVersion").value = plan.currentVersion;
+      byId("nextAppVersion").value = plan.nextVersion;
+      syncPublishButton();
+    } catch (error) {
+      renderValidationResult(byId("publishValidationResult"), [...errors, error.message]);
+    }
+  }
+
+  function syncPublishButton() {
+    const valid = validateCharacter().length === 0
+      && Boolean(byId("publishLogInput").value.trim())
+      && Boolean(state.nextAppVersion);
+    byId("confirmPublishButton").disabled = !valid;
+  }
+
+  async function publishCharacter() {
+    const errors = validateCharacter();
+    const updateLog = byId("publishLogInput").value.trim();
+    if (errors.length || !updateLog) {
+      renderValidationResult(
+        byId("publishValidationResult"),
+        [...errors, ...(!updateLog ? ["업데이트 로그를 입력해 주세요."] : [])],
+      );
+      return;
+    }
+    const button = byId("confirmPublishButton");
+    setButtonBusy(button, true, "게시 중…");
+    try {
+      const result = await api(
+        `/v1/todo/characters/${encodeURIComponent(state.editingCharacterId)}/publish`,
+        {
+          method: "POST",
+          body: {
+            request_id: state.publishRequestId,
+            expected_revision: state.currentDraftRevision,
+            update_log: updateLog,
+          },
+        },
+      );
+      const version = result.publication?.target_version || state.nextAppVersion;
+      publishDialog.close();
+      state.publishRequestId = "";
+      await Promise.all([loadCharacters(), loadPublications()]);
+      const character = state.characters.find((item) => item.id === state.editingCharacterId);
+      if (character) updateEditorHeading(character);
+      showNotice(`앱 v${version} 게시를 시작했습니다. GitHub Actions에서 빌드가 진행됩니다.`, "success", true);
+    } catch (error) {
+      state.publishRequestId = requestId("todo-publish");
+      showNotice(error.message, "error", true);
+    } finally {
+      setButtonBusy(button, false);
+      syncPublishButton();
+    }
   }
 
   byId("openPublishButton").addEventListener("click", openPublishDialog);
+  byId("publishLogInput").addEventListener("input", syncPublishButton);
+  byId("confirmPublishButton").addEventListener("click", publishCharacter);
   byId("closePublishButton").addEventListener("click", () => publishDialog.close());
   byId("cancelPublishButton").addEventListener("click", () => publishDialog.close());
+  byId("publishHistoryButton").addEventListener("click", () => switchWorkspace("publications"));
   byId("addOrderItemButton").addEventListener("click", () => addOrderItem());
 
   byId("orderItems").addEventListener("click", (event) => {
@@ -1033,11 +1147,16 @@
     catch (error) { showNotice(error.message, "error", true); }
   });
 
+  byId("refreshPublicationsButton").addEventListener("click", async () => {
+    try { await loadPublications(); showNotice("게시 이력을 새로고침했습니다.", "success"); }
+    catch (error) { showNotice(error.message, "error", true); }
+  });
+
   byId("refreshAllButton").addEventListener("click", async (event) => {
     const button = event.currentTarget;
     setButtonBusy(button, true, "새로고침 중…");
     try {
-      await Promise.all([loadCharacters(), loadOrders()]);
+      await Promise.all([loadCharacters(), loadOrders(), loadPublications()]);
       showNotice("운영 데이터를 새로고침했습니다.", "success");
     } catch (error) {
       showNotice(error.message, "error", true);
