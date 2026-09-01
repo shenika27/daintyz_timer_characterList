@@ -372,6 +372,7 @@
 
 .todo-file-button input { display: none; }
 .todo-thumbnail-card > p { margin: 10px 2px 0; color: var(--shell-sub); font-size: 10.5px; line-height: 1.5; }
+.todo-thumbnail-card > .todo-button { margin-top: 8px; }
 
 .todo-asset-grid {
   display: grid;
@@ -404,6 +405,7 @@
 .todo-asset-preview img { width: 100%; height: 100%; object-fit: contain; }
 .todo-asset-card strong { display: block; font-size: 13px; }
 .todo-asset-card p { min-height: 32px; margin: 4px 0 10px; color: var(--shell-sub); font-size: 10.5px; line-height: 1.45; }
+.todo-asset-card > .todo-button { margin-left: 4px; }
 .todo-asset-file-name { display: block; margin: 8px 0 0; overflow: hidden; color: var(--shell-sub); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
 .todo-audio-list { display: grid; gap: 9px; }

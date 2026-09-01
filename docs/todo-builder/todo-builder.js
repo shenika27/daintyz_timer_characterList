@@ -68,6 +68,7 @@
     imageAssets: new Map(),
     audioAssets: new Map(),
     thumbnailAsset: null,
+    currentDraftRevision: null,
     previewAction: "default",
     playingAudio: null,
   };
@@ -155,8 +156,12 @@
       headers: { ...(options.headers || {}) },
     };
     if (options.body !== undefined) {
-      request.headers["Content-Type"] = "application/json";
-      request.body = JSON.stringify(options.body);
+      if (options.body instanceof FormData) {
+        request.body = options.body;
+      } else {
+        request.headers["Content-Type"] = "application/json";
+        request.body = JSON.stringify(options.body);
+      }
     }
     const response = await fetch(`${API_URL}${path}`, request);
     const data = await response.json().catch(() => ({}));
@@ -216,7 +221,15 @@
   }
 
   function revokeAsset(asset) {
-    if (asset?.url) URL.revokeObjectURL(asset.url);
+    if (asset?.local && asset.url) URL.revokeObjectURL(asset.url);
+  }
+
+  function assetName(asset) {
+    return asset?.file?.name || asset?.name || "";
+  }
+
+  function localAsset(file) {
+    return { file, name: file.name, type: file.type, size: file.size, url: URL.createObjectURL(file), local: true };
   }
 
   function clearEditorAssets() {
@@ -227,6 +240,12 @@
       state.playingAudio.pause();
       state.playingAudio = null;
     }
+  }
+
+  function releaseCurrentLocalAssets() {
+    revokeAsset(state.thumbnailAsset);
+    state.imageAssets.forEach(revokeAsset);
+    state.audioAssets.forEach(revokeAsset);
   }
 
   function currentDraftKey() {
@@ -240,6 +259,7 @@
       thumbnail: state.thumbnailAsset,
       images: new Map(state.imageAssets),
       audio: new Map(state.audioAssets),
+      revision: state.currentDraftRevision,
     });
   }
 
@@ -248,7 +268,19 @@
     state.thumbnailAsset = draft?.thumbnail || null;
     state.imageAssets = new Map(draft?.images || []);
     state.audioAssets = new Map(draft?.audio || []);
+    state.currentDraftRevision = draft?.revision || null;
     byId("characterDescription").value = draft?.description || "";
+  }
+
+  function draftFromCharacter(character) {
+    const assets = character.assets || {};
+    return {
+      description: character.description || "",
+      thumbnail: assets.thumbnail ? { ...assets.thumbnail, local: false } : null,
+      images: new Map(Object.entries(assets.images || {}).map(([action, asset]) => [action, { ...asset, local: false }])),
+      audio: new Map(Object.entries(assets.audio || {}).map(([action, asset]) => [action, { ...asset, local: false }])),
+      revision: character.draft_revision || null,
+    };
   }
 
   function updateEditorHeading(character = null) {
@@ -270,9 +302,11 @@
     const preview = byId("thumbnailPreview");
     if (!state.thumbnailAsset) {
       preview.innerHTML = "<span>대표 이미지</span>";
+      byId("removeThumbnailButton").disabled = true;
       return;
     }
     preview.innerHTML = `<img src="${escapeHtml(state.thumbnailAsset.url)}" alt="대표 이미지 미리보기">`;
+    byId("removeThumbnailButton").disabled = false;
   }
 
   function renderImageSlots() {
@@ -289,7 +323,8 @@
             ${asset ? "파일 교체" : "이미지 선택"}
             <input type="file" accept=".png,.gif,image/png,image/gif" data-image-input="${escapeHtml(action.id)}">
           </label>
-          <span class="todo-asset-file-name">${escapeHtml(asset?.file?.name || "선택된 파일 없음")}</span>
+          <button class="todo-button todo-button-ghost todo-button-small" type="button" data-remove-image="${escapeHtml(action.id)}"${asset ? "" : " disabled"}>삭제</button>
+          <span class="todo-asset-file-name">${escapeHtml(assetName(asset) || "선택된 파일 없음")}</span>
         </article>
       `;
     }).join("");
@@ -305,7 +340,7 @@
             <strong>${escapeHtml(action.label)}</strong>
             <span>${escapeHtml(action.description)}</span>
           </div>
-          <span class="todo-audio-file">${escapeHtml(asset?.file?.name || "연결된 음성 없음")}</span>
+          <span class="todo-audio-file">${escapeHtml(assetName(asset) || "연결된 음성 없음")}</span>
           <div class="todo-audio-actions">
             <label class="todo-file-button">
               ${asset ? "교체" : "파일 선택"}
@@ -336,7 +371,7 @@
     const imageAsset = resolvedImageAsset(action.id);
     const audioAsset = state.audioAssets.get(action.id);
     byId("previewActionName").textContent = action.label;
-    byId("previewFileName").textContent = imageAsset?.file?.name || "연결된 이미지 없음";
+    byId("previewFileName").textContent = assetName(imageAsset) || "연결된 이미지 없음";
     byId("previewCanvas").innerHTML = imageAsset
       ? `<img src="${escapeHtml(imageAsset.url)}" alt="${escapeHtml(action.label)} 캐릭터 미리보기">`
       : "<span>이미지를 선택하면 여기에 표시됩니다.</span>";
@@ -351,6 +386,12 @@
     byId("characterId").readOnly = Boolean(character);
     byId("characterName").value = character?.name || "";
     byId("characterStatus").value = character?.status || "DRAFT";
+    [...byId("characterStatus").options].forEach((option) => {
+      option.disabled = character?.status === "PUBLISHED"
+        ? !["PUBLISHED", "ARCHIVED"].includes(option.value)
+        : option.value !== (character?.status || "DRAFT");
+    });
+    byId("characterStatus").disabled = character?.status !== "PUBLISHED";
     loadCharacterDraft(character?.id || "__new__");
     state.previewAction = "default";
     updateEditorHeading(character);
@@ -439,6 +480,7 @@
   async function loadCharacters() {
     const data = await api("/v1/todo/characters");
     state.characters = Array.isArray(data.characters) ? data.characters : [];
+    state.characters.forEach((character) => state.characterDrafts.set(character.id, draftFromCharacter(character)));
     renderCharacters();
   }
 
@@ -709,14 +751,45 @@
     setButtonBusy(button, true, "저장 중…");
     try {
       await api("/v1/todo/characters", { method: "POST", body: payload });
-      captureCharacterDraft();
-      await loadCharacters();
       state.editingCharacterId = payload.id;
       idInput.readOnly = true;
-      const savedCharacter = state.characters.find((character) => character.id === payload.id) || payload;
+      const keepSlots = [];
+      const draftBody = new FormData();
+      draftBody.set("description", byId("characterDescription").value.trim());
+      if (state.currentDraftRevision) draftBody.set("expected_revision", state.currentDraftRevision);
+      if (state.thumbnailAsset) {
+        keepSlots.push("thumbnail");
+        if (state.thumbnailAsset.file) draftBody.append("asset_thumbnail", state.thumbnailAsset.file);
+      }
+      state.imageAssets.forEach((asset, action) => {
+        const slot = `image-${action}`;
+        keepSlots.push(slot);
+        if (asset.file) draftBody.append(`asset_${slot}`, asset.file);
+      });
+      state.audioAssets.forEach((asset, action) => {
+        const slot = `audio-${action}`;
+        keepSlots.push(slot);
+        if (asset.file) draftBody.append(`asset_${slot}`, asset.file);
+      });
+      draftBody.set("keep_slots", JSON.stringify(keepSlots));
+      const draftResult = await api(`/v1/todo/characters/${encodeURIComponent(payload.id)}/draft`, {
+        method: "POST",
+        body: draftBody,
+      });
+      releaseCurrentLocalAssets();
+      const savedCharacter = draftResult.character || payload;
+      const existingIndex = state.characters.findIndex((character) => character.id === payload.id);
+      if (existingIndex >= 0) state.characters.splice(existingIndex, 1, savedCharacter);
+      else state.characters.push(savedCharacter);
+      state.characterDrafts.set(payload.id, draftFromCharacter(savedCharacter));
+      loadCharacterDraft(payload.id);
+      renderThumbnail();
+      renderImageSlots();
+      renderAudioSlots();
+      renderPreview();
       updateEditorHeading(savedCharacter);
-      byId("characterDraftMessage").textContent = "기본정보를 저장했습니다. 이미지·음원은 현재 브라우저에서만 유지됩니다.";
-      showNotice("캐릭터 기본정보를 저장했습니다.", "success");
+      byId("characterDraftMessage").textContent = `서버에 초안을 저장했습니다. ${formatDateTime(savedCharacter.draft_saved_at)}`;
+      showNotice("캐릭터 기본정보와 이미지·음원 초안을 저장했습니다.", "success");
     } catch (error) {
       showNotice(error.message, "error", true);
     } finally {
@@ -761,7 +834,14 @@
       return;
     }
     revokeAsset(state.thumbnailAsset);
-    state.thumbnailAsset = { file, url: URL.createObjectURL(file) };
+    state.thumbnailAsset = localAsset(file);
+    renderThumbnail();
+  });
+
+  byId("removeThumbnailButton").addEventListener("click", () => {
+    revokeAsset(state.thumbnailAsset);
+    state.thumbnailAsset = null;
+    byId("thumbnailInput").value = "";
     renderThumbnail();
   });
 
@@ -775,7 +855,17 @@
       return;
     }
     revokeAsset(state.imageAssets.get(input.dataset.imageInput));
-    state.imageAssets.set(input.dataset.imageInput, { file, url: URL.createObjectURL(file) });
+    state.imageAssets.set(input.dataset.imageInput, localAsset(file));
+    renderImageSlots();
+    renderPreview();
+  });
+
+  byId("characterImageSlots").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-image]");
+    if (!button) return;
+    const actionId = button.dataset.removeImage;
+    revokeAsset(state.imageAssets.get(actionId));
+    state.imageAssets.delete(actionId);
     renderImageSlots();
     renderPreview();
   });
@@ -790,7 +880,7 @@
       return;
     }
     revokeAsset(state.audioAssets.get(input.dataset.audioInput));
-    state.audioAssets.set(input.dataset.audioInput, { file, url: URL.createObjectURL(file) });
+    state.audioAssets.set(input.dataset.audioInput, localAsset(file));
     renderAudioSlots();
     renderPreview();
   });
