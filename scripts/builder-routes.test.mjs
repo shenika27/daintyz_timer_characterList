@@ -39,6 +39,14 @@ test("이동한 타이머 빌더의 핵심 작업 버튼을 보존한다", () =>
   }
 });
 
+test("타이머 빌더 출시 목록이 업로드 진행률과 실패 재시도를 표시한다", () => {
+  const html = read("docs/timer-builder/index.html");
+  assert.match(html, /class="rel-progress-track"/);
+  assert.match(html, /className = "rel-percent"/);
+  assert.match(html, /retryDeployment\(entry\.skinId\)/);
+  assert.match(html, /\/v1\/inbox\/deployment\/retry/);
+});
+
 test("공용 인증은 허용된 내부 빌더 이름만 이동 경로로 사용한다", () => {
   const source = read("docs/shared/builder-auth.js");
   assert.match(source, /"timer-builder": "\.\/timer-builder\/"/);

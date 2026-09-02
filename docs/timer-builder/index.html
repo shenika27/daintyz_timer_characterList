@@ -262,6 +262,20 @@
   }
   .rel-delete:hover { border-color: var(--danger); color: var(--danger); background: #fff7f6; }
   .rel-delete:disabled { color: var(--sub); border-color: var(--line); background: #fff; cursor: default; }
+  .rel-percent {
+    position: absolute; top: 13px; right: 10px; min-width: 38px; text-align: center;
+    color: var(--sub); font-size: 12px; font-weight: 800;
+  }
+  .rel-item.rel-uploading { cursor: default; }
+  .rel-item.rel-uploading:hover { background: transparent; }
+  .rel-item.rel-uploading .rel-name { color: #a4a9b2; }
+  .rel-item.rel-upload-failed .rel-name { color: var(--danger); }
+  .rel-progress-meta { margin-top: 6px; }
+  .rel-progress-track { height: 6px; overflow: hidden; border-radius: 999px; background: #e7e9ee; }
+  .rel-progress-bar { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
+  .rel-upload-failed .rel-progress-bar { background: var(--danger); }
+  .rel-progress-step { display: block; margin-top: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .rel-progress-step a { color: inherit; }
   /* 삭제 요청을 올린 항목: Action이 처리할 때까지 회색·클릭 불가로 잠근다. */
   .rel-item.rel-deleting { opacity: .45; pointer-events: none; }
   .rel-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1423,10 +1437,11 @@ async function buildBundleBlob() {
   if (json.character?.running?.interlude) await addMotionAsset("interlude");
 
   // 3) catalog 병합용 항목
-  bundle.file("catalog_entry.json", JSON.stringify(buildCatalogEntry(), null, 2));
+  const catalogEntry = buildCatalogEntry();
+  bundle.file("catalog_entry.json", JSON.stringify(catalogEntry, null, 2));
 
   const blob = await bundle.generateAsync({ type: "blob", compression: "DEFLATE" });
-  return { blob, skinId };
+  return { blob, skinId, entry: catalogEntry };
 }
 
 // ① ⬇ zip 만들기 — 파일로 다운로드(수동 업로드용, 기존 방식).
@@ -1452,17 +1467,32 @@ async function autoUpload() {
   if (!inboxReady()) { alert("자동 업로드가 설정되지 않았습니다. '📤 직접 업로드'를 사용하세요."); return; }
   const btn = $("autoUploadBtn");
   const orig = btn.textContent;
+  const pendingEntry = buildCatalogEntry();
+  if (!pendingEntry) return;
+  beginDeployment(pendingEntry);
   btn.disabled = true; btn.textContent = "압축 중…";
   try {
     const r = await buildBundleBlob();
-    if (!r) return;
+    if (!r) { removeDeployment(pendingEntry.skinId); return; }
+    updateDeployment(r.skinId, {
+      entry: withNextCatalogVersion(r.entry), progress: 18, currentStep: "업로드 서버로 전송 중",
+      blob: r.blob, filename: `${r.skinId}.zip`,
+      message: `chore(skin): _inbox/${r.skinId}.zip (빌더 업로드)`,
+    });
     btn.textContent = "업로드 중…";
-    const ok = await commitToInbox(`${r.skinId}.zip`, r.blob, `chore(skin): _inbox/${r.skinId}.zip (빌더 업로드)`);
-    if (ok) {
+    const uploaded = await commitToInbox(`${r.skinId}.zip`, r.blob, `chore(skin): _inbox/${r.skinId}.zip (빌더 업로드)`);
+    if (uploaded) {
+      updateDeployment(r.skinId, {
+        state: "waiting", progress: 35, currentStep: "GitHub Actions 실행 대기", commit: uploaded.commit,
+      });
       $("status").innerHTML =
-        `✅ <b>${r.skinId}.zip</b> 업로드 완료 → 1~2분 뒤 Actions에서 상점에 자동 반영됩니다.`;
+        `⬆ <b>${r.skinId}.zip</b> 업로드 완료 → 오른쪽 출시 목록에서 배포 진행 상황을 확인하세요.`;
+      monitorDeployment(r.skinId);
+    } else {
+      failDeployment(r.skinId, "업로드 서버 전송 실패", "upload");
     }
   } catch (e) {
+    failDeployment(pendingEntry.skinId, e.message || "업로드 처리 실패", "upload");
     alert("업로드 중 오류: " + e.message);
   } finally {
     btn.textContent = orig; btn.disabled = false;
@@ -1561,7 +1591,7 @@ function blobToBase64(blob) {
   });
 }
 
-// _inbox/<filename> 로 파일 하나를 커밋. 성공 true / 실패 false.
+// _inbox/<filename> 로 파일 하나를 커밋. 성공 시 커밋 정보 / 실패 시 null.
 async function commitToInbox(filename, blob, message) {
   const contentBase64 = await blobToBase64(blob);
   let res, data;
@@ -1575,17 +1605,17 @@ async function commitToInbox(filename, blob, message) {
     data = await res.json();
   } catch (e) {
     alert("업로드 서버에 연결하지 못했습니다: " + e.message);
-    return false;
+    return null;
   }
   if (res.status === 401) {
     showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
-    return false;
+    return null;
   }
   if (!data || !data.ok) {
     alert("업로드 실패: " + (data && data.error ? data.error : res.status));
-    return false;
+    return null;
   }
-  return true;
+  return data;
 }
 
 // 현재 폼 상태 전체 초기화(편집 로드 직전에 호출).
@@ -1827,9 +1857,173 @@ async function makeDeleteMarker(entry = null) {
 /* ---------- 출시 스킨 조회 패널 ---------- */
 const CATALOG_URL = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main/catalog.json";
 let releasedSkins = [];
+const pendingDeployments = new Map();
+const DEPLOYMENT_POLL_MS = 5000;
+const DEPLOYMENT_TIMEOUT_MS = 10 * 60 * 1000;
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function deploymentKey(skinId) {
+  return String(skinId || "").toLowerCase();
+}
+
+function withNextCatalogVersion(entry) {
+  const existing = releasedSkins.find(s => deploymentKey(s.skinId) === deploymentKey(entry?.skinId));
+  return { ...entry, version: existing ? (Number(existing.version) || 0) + 1 : 1 };
+}
+
+function beginDeployment(entry) {
+  const prepared = withNextCatalogVersion(entry);
+  pendingDeployments.set(deploymentKey(prepared.skinId), {
+    entry: prepared,
+    state: "building",
+    progress: 5,
+    currentStep: "번들 압축 준비 중",
+    commit: null,
+    runId: null,
+    htmlUrl: null,
+    failureKind: null,
+    pollGeneration: 0,
+  });
+  renderReleased();
+}
+
+function updateDeployment(skinId, changes) {
+  const deployment = pendingDeployments.get(deploymentKey(skinId));
+  if (!deployment) return null;
+  Object.assign(deployment, changes);
+  renderReleased();
+  return deployment;
+}
+
+function removeDeployment(skinId) {
+  pendingDeployments.delete(deploymentKey(skinId));
+  renderReleased();
+}
+
+function failDeployment(skinId, message, failureKind = "action", details = {}) {
+  updateDeployment(skinId, {
+    state: "failed",
+    currentStep: message || "배포 실패",
+    failureKind,
+    runId: details.runId ?? pendingDeployments.get(deploymentKey(skinId))?.runId ?? null,
+    htmlUrl: details.htmlUrl ?? pendingDeployments.get(deploymentKey(skinId))?.htmlUrl ?? null,
+  });
+}
+
+function waitForNextDeploymentPoll() {
+  return new Promise(resolve => setTimeout(resolve, DEPLOYMENT_POLL_MS));
+}
+
+async function readDeploymentStatus(commit) {
+  const response = await fetch(`${INBOX_API_URL}/v1/inbox/deployment?commit=${encodeURIComponent(commit)}`, {
+    method: "GET", credentials: "include", cache: "no-store",
+  });
+  const data = await response.json().catch(() => null);
+  if (response.status === 401) showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
+  if (!response.ok || !data?.ok) throw new Error(data?.error || `배포 상태 조회 실패(${response.status})`);
+  return data;
+}
+
+async function monitorDeployment(skinId) {
+  const key = deploymentKey(skinId);
+  const deployment = pendingDeployments.get(key);
+  if (!deployment) return;
+  if (!deployment.commit) {
+    failDeployment(skinId, "업로드 커밋 정보를 받지 못했습니다.", "upload");
+    return;
+  }
+  const generation = ++deployment.pollGeneration;
+  const deadline = Date.now() + DEPLOYMENT_TIMEOUT_MS;
+  let consecutiveErrors = 0;
+
+  while (Date.now() < deadline) {
+    const current = pendingDeployments.get(key);
+    if (!current || current !== deployment || current.pollGeneration !== generation) return;
+    try {
+      const status = await readDeploymentStatus(current.commit);
+      consecutiveErrors = 0;
+      updateDeployment(skinId, {
+        state: status.state,
+        progress: status.progress,
+        currentStep: status.currentStep,
+        runId: status.runId,
+        htmlUrl: status.htmlUrl,
+      });
+      if (status.state === "success") {
+        const finished = pendingDeployments.get(key);
+        if (!finished || finished !== deployment || finished.pollGeneration !== generation) return;
+        releasedSkins = releasedSkins.filter(s => deploymentKey(s.skinId) !== key);
+        releasedSkins.push(finished.entry);
+        releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
+        pendingDeployments.delete(key);
+        renderReleased();
+        $("status").innerHTML = `✅ <b>${escapeHtml(finished.entry.name)}</b> 배포가 완료되었습니다.`;
+        setTimeout(loadReleased, 1500);
+        return;
+      }
+      if (status.state === "failed") {
+        failDeployment(skinId, `실패: ${status.failedStep || "GitHub Actions"}`, "action", status);
+        return;
+      }
+    } catch (error) {
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 3) {
+        failDeployment(skinId, `상태 확인 실패: ${error.message}`, "status");
+        return;
+      }
+      updateDeployment(skinId, { currentStep: "상태 확인 재시도 중" });
+    }
+    await waitForNextDeploymentPoll();
+  }
+  failDeployment(skinId, "상태 확인 시간이 초과되었습니다.", "status");
+}
+
+async function retryDeployment(skinId) {
+  const key = deploymentKey(skinId);
+  const deployment = pendingDeployments.get(key);
+  if (!deployment || deployment.state !== "failed") return;
+  updateDeployment(skinId, {
+    state: "retrying", progress: Math.max(35, Number(deployment.progress) || 0), currentStep: "재시도 요청 중",
+  });
+  try {
+    if (deployment.failureKind === "action" && deployment.runId) {
+      const response = await fetch(`${INBOX_API_URL}/v1/inbox/deployment/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ runId: deployment.runId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.status === 401) showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
+      if (!response.ok || !data?.ok) throw new Error(data?.error || `Actions 재시도 실패(${response.status})`);
+      updateDeployment(skinId, { state: "queued", progress: 38, currentStep: "GitHub Actions 재실행 대기", failureKind: null });
+      monitorDeployment(skinId);
+      return;
+    }
+    if (deployment.failureKind === "status" && deployment.commit) {
+      updateDeployment(skinId, { state: "waiting", currentStep: "배포 상태 다시 확인 중", failureKind: null });
+      monitorDeployment(skinId);
+      return;
+    }
+    if (deployment.blob && deployment.filename) {
+      const uploaded = await commitToInbox(deployment.filename, deployment.blob, deployment.message);
+      if (!uploaded) throw new Error("업로드 서버 전송에 실패했습니다.");
+      updateDeployment(skinId, {
+        state: "waiting", progress: 35, currentStep: "GitHub Actions 실행 대기",
+        commit: uploaded.commit, failureKind: null,
+      });
+      monitorDeployment(skinId);
+      return;
+    }
+    pendingDeployments.delete(key);
+    renderReleased();
+    autoUpload();
+  } catch (error) {
+    failDeployment(skinId, `재시도 실패: ${error.message}`, deployment.failureKind || "status");
+  }
 }
 
 function updateDupHint() {
@@ -1863,21 +2057,75 @@ function updateDupHint() {
   }
 }
 
+function releasedEntryMatches(entry, query) {
+  return !query ||
+    (entry.skinId || "").toLowerCase().includes(query) ||
+    (entry.name || "").toLowerCase().includes(query) ||
+    (entry.localized?.en?.name || "").toLowerCase().includes(query);
+}
+
+function appendPendingDeployment(ul, deployment) {
+  const entry = deployment.entry;
+  const progress = Math.max(0, Math.min(100, Number(deployment.progress) || 0));
+  const failed = deployment.state === "failed";
+  const li = document.createElement("li");
+  li.className = `rel-item rel-uploading${failed ? " rel-upload-failed" : ""}`;
+  li.dataset.skinId = entry.skinId || "";
+  li.innerHTML =
+    `<div class="rel-name">${escapeHtml(entry.name || "(이름 없음)")}</div>` +
+    `<div class="rel-meta rel-progress-meta">` +
+      `<div class="rel-progress-track" role="progressbar" aria-label="${escapeHtml(entry.name || entry.skinId)} 배포 진행률" ` +
+        `aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}">` +
+        `<span class="rel-progress-bar" style="width:${progress}%"></span></div>` +
+      `<span class="rel-progress-step"></span></div>`;
+  const step = li.querySelector(".rel-progress-step");
+  step.textContent = deployment.currentStep || "처리 중";
+  if (deployment.htmlUrl) {
+    step.append(" · ");
+    const link = document.createElement("a");
+    link.href = deployment.htmlUrl;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Actions";
+    step.appendChild(link);
+  }
+  if (failed) {
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "rel-delete";
+    retryBtn.type = "button";
+    retryBtn.textContent = "재시도";
+    retryBtn.title = "실패한 배포 다시 시도";
+    retryBtn.onclick = (event) => {
+      event.stopPropagation();
+      retryDeployment(entry.skinId);
+    };
+    li.appendChild(retryBtn);
+  } else {
+    const percent = document.createElement("span");
+    percent.className = "rel-percent";
+    percent.textContent = `${progress}%`;
+    li.appendChild(percent);
+  }
+  ul.appendChild(li);
+}
+
 function renderReleased() {
   const ul = $("relList");
   const q = $("relSearch").value.trim().toLowerCase();
   const activeSkins = releasedSkins.filter(s => !s.archived);
-  const list = activeSkins.filter(s =>
-    !q ||
-    (s.skinId || "").toLowerCase().includes(q) ||
-    (s.name || "").toLowerCase().includes(q) ||
-    (s.localized?.en?.name || "").toLowerCase().includes(q));
-  $("relCount").textContent = `${list.length}/${activeSkins.length}`;
-  if (!list.length) {
-    ul.innerHTML = `<li class="rel-empty">${activeSkins.length ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
+  const deployments = [...pendingDeployments.values()];
+  const pendingIds = new Set(deployments.map(item => deploymentKey(item.entry.skinId)));
+  const normalSkins = activeSkins.filter(s => !pendingIds.has(deploymentKey(s.skinId)));
+  const visibleDeployments = deployments.filter(item => releasedEntryMatches(item.entry, q));
+  const list = normalSkins.filter(s => releasedEntryMatches(s, q));
+  const total = deployments.length + normalSkins.length;
+  $("relCount").textContent = `${visibleDeployments.length + list.length}/${total}`;
+  if (!visibleDeployments.length && !list.length) {
+    ul.innerHTML = `<li class="rel-empty">${total ? "검색 결과 없음" : "목록이 비어있음"}</li>`;
     return;
   }
   ul.innerHTML = "";
+  visibleDeployments.forEach(deployment => appendPendingDeployment(ul, deployment));
   list.forEach(s => {
     const free = s.isFree || !s.price || Number(s.price) <= 0;
     const price = free ? "무료" : `${Number(s.price).toLocaleString()}원`;
@@ -1920,8 +2168,11 @@ function renderReleased() {
 
 async function loadReleased() {
   const ul = $("relList");
-  ul.innerHTML = `<li class="rel-empty">불러오는 중…</li>`;
-  $("relCount").textContent = "…";
+  const previousSkins = releasedSkins;
+  if (!previousSkins.length && !pendingDeployments.size) {
+    ul.innerHTML = `<li class="rel-empty">불러오는 중…</li>`;
+    $("relCount").textContent = "…";
+  }
   try {
     const res = await fetch(CATALOG_URL + "?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1934,9 +2185,14 @@ async function loadReleased() {
     if ($("giftSkinCombo")?.classList.contains("open")) renderGiftCombo();
     updateDupHint();
   } catch (e) {
-    releasedSkins = [];
-    $("relCount").textContent = "—";
-    ul.innerHTML = `<li class="rel-empty">목록을 못 불러왔어요<br>(${escapeHtml(e.message)})<br>↻ 새로고침을 눌러보세요.</li>`;
+    if (previousSkins.length || pendingDeployments.size) {
+      releasedSkins = previousSkins;
+      renderReleased();
+    } else {
+      releasedSkins = [];
+      $("relCount").textContent = "—";
+      ul.innerHTML = `<li class="rel-empty">목록을 못 불러왔어요<br>(${escapeHtml(e.message)})<br>↻ 새로고침을 눌러보세요.</li>`;
+    }
   }
 }
 
