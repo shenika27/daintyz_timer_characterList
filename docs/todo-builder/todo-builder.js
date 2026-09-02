@@ -7,8 +7,13 @@
     PUBLISHED: ["판매 중", "active"],
     ARCHIVED: ["판매 종료", "neutral"],
     ACTIVE: ["정상", "active"],
-    PARTIALLY_REFUNDED: ["부분 환불", "warning"],
-    REFUNDED: ["환불", "danger"],
+    AVAILABLE: ["사용 가능", "active"],
+    ALL_REDEEMED: ["전부 소진", "info"],
+    ALL_REVOKED: ["폐기됨", "danger"],
+    PARTIALLY_REDEEMED: ["일부 소진", "warning"],
+    PARTIALLY_REVOKED: ["일부 폐기", "warning"],
+    PARTIALLY_REFUNDED: ["일부 환불", "warning"],
+    REFUNDED: ["전체 환불", "danger"],
     ISSUED: ["미사용", "active"],
     REDEEMED: ["소진", "info"],
     REPLACED: ["교체됨", "warning"],
@@ -36,10 +41,10 @@
       defaultReason: "관리자 코드 폐기",
     },
     refund: {
-      title: "주문 수량 환불",
-      description: "선택한 주문 수량 한 개를 환불 처리하고 연결된 코드와 이용권을 모두 비활성화합니다.",
-      confirm: "환불 처리",
-      defaultReason: "구매 취소 환불",
+      title: "환불 대응 이용권 회수",
+      description: "네이버 스토어에서 환불을 완료한 수량만 처리해 주세요. 연결된 코드와 이미 등록된 이용권이 모두 비활성화됩니다.",
+      confirm: "이용권 회수",
+      defaultReason: "네이버 스토어 환불 완료",
     },
   });
   const CHARACTER_ACTIONS = Object.freeze([
@@ -59,6 +64,7 @@
   const state = {
     characters: [],
     entries: [],
+    expandedOrderIds: new Set(),
     orderRequestId: "",
     issuedCodes: [],
     reissuedCode: "",
@@ -624,14 +630,67 @@
     byId("initialCodeResult").hidden = false;
   }
 
-  function entryStatus(entry) {
-    const itemStatus = String(entry.item_status || entry.order_status || "ACTIVE");
+  function codeStatus(entry) {
+    const quantity = numberValue(entry.total_quantity ?? entry.quantity);
+    const refunded = numberValue(entry.refunded_count);
     const redeemable = numberValue(entry.redeemable_count);
     const redeemed = numberValue(entry.redeemed_count);
-    if (itemStatus === "REFUNDED" || itemStatus === "PARTIALLY_REFUNDED") return itemStatus;
-    if (redeemable > 0) return "ISSUED";
-    if (redeemed > 0) return "REDEEMED";
-    return itemStatus;
+    const revoked = numberValue(entry.revoked_count);
+    if (quantity > 0 && refunded >= quantity) return "REFUNDED";
+    if (refunded > 0) return "PARTIALLY_REFUNDED";
+    const activeQuantity = Math.max(quantity - refunded, 0);
+    if (activeQuantity > 0 && redeemed >= activeQuantity) return "ALL_REDEEMED";
+    if (redeemed > 0) return "PARTIALLY_REDEEMED";
+    if (activeQuantity > 0 && revoked >= activeQuantity) return "ALL_REVOKED";
+    if (revoked > 0) return "PARTIALLY_REVOKED";
+    if (redeemable > 0) return "AVAILABLE";
+    return "ALL_REVOKED";
+  }
+
+  function codeMetrics(entry) {
+    return `
+      <span class="todo-metrics todo-metrics-summary">
+        <span>사용 가능 ${numberValue(entry.redeemable_count)}</span>
+        <span>소진 ${numberValue(entry.redeemed_count)}</span>
+        <span>환불 ${numberValue(entry.refunded_count)}</span>
+        <span>폐기 ${numberValue(entry.revoked_count)}</span>
+      </span>`;
+  }
+
+  function renderOrderItems(order) {
+    const items = Array.isArray(order.items) ? order.items : [];
+    return `
+      <tr class="todo-order-detail-row">
+        <td colspan="7">
+          <section class="todo-order-detail" aria-label="${escapeHtml(order.external_order_id)} 상품별 코드 현황">
+            <div class="todo-order-detail-heading">
+              <div>
+                <strong>상품별 코드 현황</strong>
+                <span>${items.length}종 · 총 ${numberValue(order.total_quantity)}개</span>
+              </div>
+              <span>상품의 발급 횟수를 누르면 코드별 이력이 열립니다.</span>
+            </div>
+            <div class="todo-order-item-table-wrap">
+              <table class="todo-order-item-table">
+                <thead><tr><th>상품주문번호</th><th>캐릭터</th><th>수량</th><th>코드 현황</th><th>상태</th><th>발급 이력</th></tr></thead>
+                <tbody>${items.map((item) => {
+                  const itemId = encodeURIComponent(item.order_item_id || "");
+                  const issuanceCount = numberValue(item.issuance_count);
+                  return `
+                    <tr>
+                      <td><span class="todo-table-main">${escapeHtml(item.external_product_order_id || "미입력")}</span><span class="todo-table-sub">${escapeHtml(item.order_item_id)}</span></td>
+                      <td><span class="todo-table-main">${escapeHtml(item.character_name)}</span><span class="todo-table-sub">${escapeHtml(item.character_id)}</span></td>
+                      <td>${numberValue(item.quantity)}</td>
+                      <td>${codeMetrics(item)}</td>
+                      <td>${statusBadge(codeStatus(item))}</td>
+                      <td><button class="todo-history-link" type="button" data-history-item="${escapeHtml(itemId)}"${issuanceCount ? "" : " disabled"}>${issuanceCount}회</button></td>
+                    </tr>`;
+                }).join("")}</tbody>
+              </table>
+            </div>
+          </section>
+        </td>
+      </tr>`;
   }
 
   function renderOrders() {
@@ -639,39 +698,77 @@
     const empty = byId("orderEmpty");
     empty.hidden = state.entries.length > 0;
     body.innerHTML = state.entries.map((entry) => {
-      const itemId = encodeURIComponent(entry.order_item_id || "");
-      const issuanceCount = numberValue(entry.issuance_count);
+      const orderId = String(entry.order_id || "");
+      const encodedOrderId = encodeURIComponent(orderId);
+      const expanded = state.expandedOrderIds.has(orderId);
       return `
-        <tr>
+        <tr class="todo-order-row" data-expanded="${expanded}">
           <td>
-            <span class="todo-table-main">${escapeHtml(entry.external_order_id)}</span>
-            <span class="todo-table-sub">${escapeHtml(entry.external_product_order_id || entry.order_item_id)}</span>
+            <button class="todo-order-number" type="button" data-order-toggle="${escapeHtml(encodedOrderId)}" aria-expanded="${expanded}">
+              <span aria-hidden="true">${expanded ? "▾" : "▸"}</span>
+              <span>${escapeHtml(entry.external_order_id)}</span>
+            </button>
+            <span class="todo-table-sub">${escapeHtml(entry.order_id)}</span>
           </td>
           <td>${escapeHtml(entry.buyer_email_mask)}</td>
           <td>
-            <span class="todo-table-main">${escapeHtml(entry.character_name)}</span>
-            <span class="todo-table-sub">${escapeHtml(entry.character_id)}</span>
+            <span class="todo-table-main">캐릭터 ${numberValue(entry.character_count)}종</span>
+            <span class="todo-table-sub">총 ${numberValue(entry.total_quantity)}개 코드</span>
           </td>
-          <td>${numberValue(entry.quantity)}</td>
-          <td>
-            <button class="todo-history-link" type="button" data-history-item="${escapeHtml(itemId)}"${issuanceCount ? "" : " disabled"}>${issuanceCount}회</button>
-            <span class="todo-metrics">
-              <span>사용 가능 ${numberValue(entry.redeemable_count)}</span>
-              <span>소진 ${numberValue(entry.redeemed_count)}</span>
-              <span>환불 ${numberValue(entry.refunded_count)}</span>
-            </span>
-          </td>
-          <td>${statusBadge(entryStatus(entry))}</td>
+          <td>${codeMetrics(entry)}</td>
+          <td>${statusBadge(codeStatus(entry))}</td>
           <td>${escapeHtml(formatDateTime(entry.created_at))}</td>
+          <td><button class="todo-button todo-button-ghost todo-button-small" type="button" data-order-toggle="${escapeHtml(encodedOrderId)}" aria-expanded="${expanded}">${expanded ? "접기" : "상세"}</button></td>
         </tr>
+        ${expanded ? renderOrderItems(entry) : ""}
       `;
     }).join("");
+  }
+
+  function groupLegacyOrderEntries(entries) {
+    const grouped = new Map();
+    entries.forEach((item) => {
+      const orderId = String(item.order_id || "");
+      let order = grouped.get(orderId);
+      if (!order) {
+        order = {
+          order_id: orderId,
+          external_order_id: item.external_order_id,
+          buyer_email_mask: item.buyer_email_mask,
+          order_status: item.order_status,
+          created_at: item.created_at,
+          items: [],
+          total_quantity: 0,
+          issuance_count: 0,
+          redeemable_count: 0,
+          redeemed_count: 0,
+          refunded_count: 0,
+          revoked_count: 0,
+        };
+        grouped.set(orderId, order);
+      }
+      order.items.push(item);
+      ["quantity", "issuance_count", "redeemable_count", "redeemed_count", "refunded_count", "revoked_count"]
+        .forEach((field) => {
+          const target = field === "quantity" ? "total_quantity" : field;
+          order[target] += numberValue(item[field]);
+        });
+    });
+    return [...grouped.values()].map((order) => ({
+      ...order,
+      item_count: order.items.length,
+      character_count: new Set(order.items.map((item) => item.character_id)).size,
+    }));
   }
 
   async function loadOrders() {
     const query = byId("orderSearchInput").value.trim();
     const data = await api(`/v1/todo/orders?limit=100&q=${encodeURIComponent(query)}`);
-    state.entries = Array.isArray(data.entries) ? data.entries : [];
+    state.entries = Array.isArray(data.orders)
+      ? data.orders
+      : groupLegacyOrderEntries(Array.isArray(data.entries) ? data.entries : []);
+    const visibleIds = new Set(state.entries.map((entry) => String(entry.order_id || "")));
+    state.expandedOrderIds = new Set([...state.expandedOrderIds].filter((id) => visibleIds.has(id)));
     renderOrders();
   }
 
@@ -683,7 +780,7 @@
     if (issuance.status === "ISSUED" && issuance.is_redeemable) {
       buttons.push(`<button class="todo-button todo-button-ghost todo-button-small" type="button" data-history-action="revoke" data-issuance-id="${escapeHtml(encodeURIComponent(issuance.issuance_id))}" data-order-unit-id="${escapeHtml(encodeURIComponent(issuance.order_unit_id))}">코드 폐기</button>`);
     }
-    buttons.push(`<button class="todo-button todo-button-danger todo-button-small" type="button" data-history-action="refund" data-issuance-id="${escapeHtml(encodeURIComponent(issuance.issuance_id))}" data-order-unit-id="${escapeHtml(encodeURIComponent(issuance.order_unit_id))}">수량 1개 환불</button>`);
+    buttons.push(`<button class="todo-button todo-button-danger todo-button-small" type="button" data-history-action="refund" data-issuance-id="${escapeHtml(encodeURIComponent(issuance.issuance_id))}" data-order-unit-id="${escapeHtml(encodeURIComponent(issuance.order_unit_id))}">환불 대응 회수</button>`);
     return `<div class="todo-history-actions">${buttons.join("")}</div>`;
   }
 
@@ -1231,9 +1328,17 @@
   });
 
   byId("orderTableBody").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-history-item]");
-    if (!button) return;
-    loadHistory(decodeURIComponent(button.dataset.historyItem));
+    const historyButton = event.target.closest("[data-history-item]");
+    if (historyButton) {
+      loadHistory(decodeURIComponent(historyButton.dataset.historyItem));
+      return;
+    }
+    const toggleButton = event.target.closest("[data-order-toggle]");
+    if (!toggleButton) return;
+    const orderId = decodeURIComponent(toggleButton.dataset.orderToggle);
+    if (state.expandedOrderIds.has(orderId)) state.expandedOrderIds.delete(orderId);
+    else state.expandedOrderIds.add(orderId);
+    renderOrders();
   });
 
   byId("historyBody").addEventListener("click", (event) => {

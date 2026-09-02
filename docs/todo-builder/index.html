@@ -33,7 +33,7 @@
 
     <nav class="todo-workspace-tabs" aria-label="CharacterTodo 작업 선택">
       <button type="button" data-workspace-tab="characters" aria-selected="true">캐릭터 제작·관리</button>
-      <button type="button" data-workspace-tab="sales" aria-selected="false">주문·코드</button>
+      <button type="button" data-workspace-tab="sales" aria-selected="false">코드 발급·전달</button>
       <button type="button" data-workspace-tab="publications" aria-selected="false">게시 이력</button>
     </nav>
 
@@ -206,7 +206,7 @@
       </section>
     </section>
 
-    <section id="salesWorkspace" class="todo-workspace" aria-label="주문·코드" hidden>
+    <section id="salesWorkspace" class="todo-workspace" aria-label="코드 발급·전달" hidden>
       <section class="todo-card todo-sales-issue-card">
         <div class="todo-section-heading">
           <div>
@@ -256,7 +256,8 @@
         <div class="todo-section-heading todo-orders-heading">
           <div>
             <p class="todo-kicker">발급 원장</p>
-            <h2>주문·코드 목록</h2>
+            <h2>주문별 코드 발급 현황</h2>
+            <p>주문을 펼치면 상품별 코드 상태와 발급 이력을 확인할 수 있습니다.</p>
           </div>
           <form id="orderSearchForm" class="todo-search" role="search">
             <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
@@ -270,13 +271,13 @@
           <table class="todo-table">
             <thead>
               <tr>
-                <th scope="col">주문</th>
+                <th scope="col">주문번호</th>
                 <th scope="col">구매자</th>
-                <th scope="col">캐릭터</th>
-                <th scope="col">수량</th>
-                <th scope="col">발급 횟수</th>
-                <th scope="col">상태</th>
+                <th scope="col">발급 내용</th>
+                <th scope="col">코드 현황</th>
+                <th scope="col">코드 상태</th>
                 <th scope="col">발급일</th>
+                <th scope="col">작업</th>
               </tr>
             </thead>
             <tbody id="orderTableBody"></tbody>

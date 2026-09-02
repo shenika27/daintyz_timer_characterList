@@ -1001,6 +1001,89 @@
 .todo-table-main { display: block; font-weight: 800; }
 .todo-table-sub { display: block; margin-top: 3px; color: var(--shell-sub); font-size: 10.5px; }
 
+.todo-order-row[data-expanded="true"] {
+  background: #f8f9ff;
+}
+
+.todo-order-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--shell-accent-dark);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.todo-order-number > span:first-child {
+  width: 10px;
+  color: var(--shell-sub);
+}
+
+.todo-order-detail-row > td {
+  padding: 0 10px 16px;
+  background: #f8f9ff;
+}
+
+.todo-table tbody .todo-order-detail-row:hover {
+  background: #f8f9ff;
+}
+
+.todo-order-detail {
+  padding: 14px;
+  border: 1px solid #dfe3f2;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.todo-order-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  color: var(--shell-sub);
+  font-size: 10.5px;
+}
+
+.todo-order-detail-heading div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.todo-order-detail-heading strong {
+  color: var(--shell-ink);
+  font-size: 12px;
+}
+
+.todo-order-item-table-wrap {
+  overflow-x: auto;
+}
+
+.todo-order-item-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.todo-order-item-table th,
+.todo-order-item-table td {
+  padding: 9px 8px;
+  border-top: 1px solid #eceef4;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.todo-order-item-table th {
+  color: var(--shell-sub);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .todo-history-link {
   padding: 4px 8px;
   border: 1px solid #cdd5f7;
@@ -1019,6 +1102,10 @@
   margin-top: 5px;
   color: var(--shell-sub);
   font-size: 10.5px;
+}
+
+.todo-metrics-summary {
+  margin-top: 0;
 }
 
 .todo-empty {
@@ -1172,6 +1259,7 @@
   .todo-order-item { grid-template-columns: 1fr 1fr; }
   .todo-remove-item { justify-self: start; }
   .todo-orders-heading { align-items: stretch; flex-direction: column; }
+  .todo-order-detail-heading { flex-direction: column; gap: 4px; }
   .todo-search { flex-wrap: wrap; }
   .todo-search input { width: 100%; }
   .todo-notice { top: 122px; }
