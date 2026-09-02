@@ -2,6 +2,9 @@
   "use strict";
 
   const API_URL = "https://daintyz-skin-inbox.xornexon.workers.dev";
+  const CUSTOMIZATION_FEATURE_ID = "character_customization";
+  const CUSTOMIZATION_OPTION_VALUE = `feature:${CUSTOMIZATION_FEATURE_ID}`;
+  const CUSTOMIZATION_PRODUCT_LABEL = "커스텀 기능 영구 이용권";
   const STATUS_META = Object.freeze({
     DRAFT: ["초안", "warning"],
     PUBLISHED: ["판매 중", "active"],
@@ -523,6 +526,7 @@
     const published = state.characters.filter((character) => character.status === "PUBLISHED");
     return [
       '<option value="">캐릭터 선택</option>',
+      `<option value="${CUSTOMIZATION_OPTION_VALUE}"${selectedId === CUSTOMIZATION_OPTION_VALUE ? " selected" : ""}>${CUSTOMIZATION_PRODUCT_LABEL}</option>`,
       ...published.map((character) => `<option value="${escapeHtml(character.id)}"${character.id === selectedId ? " selected" : ""}>${escapeHtml(character.name)} (${escapeHtml(character.id)})</option>`),
     ].join("");
   }
@@ -597,7 +601,7 @@
         <input class="todo-item-external-id" type="text" maxlength="100" value="${escapeHtml(values.externalProductOrderId || "")}" placeholder="상품 단위 주문번호">
       </label>
       <label>
-        캐릭터
+        상품
         <select class="todo-item-character" required>${characterOptions(values.characterId || "")}</select>
       </label>
       <label>
@@ -622,7 +626,7 @@
       <div class="todo-code-row">
         <div class="todo-code-value">
           ${escapeHtml(item.code)}
-          <span class="todo-code-meta">${escapeHtml(item.characterId)} · 발급 ${numberValue(item.sequenceNo)}회</span>
+          <span class="todo-code-meta">${escapeHtml(item.entitlementType === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : item.characterId)} · 발급 ${numberValue(item.sequenceNo)}회</span>
         </div>
         <button class="todo-button todo-button-ghost todo-button-small" type="button" data-copy-code="${index}">복사</button>
       </div>
@@ -672,14 +676,14 @@
             </div>
             <div class="todo-order-item-table-wrap">
               <table class="todo-order-item-table">
-                <thead><tr><th>상품주문번호</th><th>캐릭터</th><th>수량</th><th>코드 현황</th><th>상태</th><th>발급 이력</th></tr></thead>
+                <thead><tr><th>상품주문번호</th><th>상품</th><th>수량</th><th>코드 현황</th><th>상태</th><th>발급 이력</th></tr></thead>
                 <tbody>${items.map((item) => {
                   const itemId = encodeURIComponent(item.order_item_id || "");
                   const issuanceCount = numberValue(item.issuance_count);
                   return `
                     <tr>
                       <td><span class="todo-table-main">${escapeHtml(item.external_product_order_id || "미입력")}</span><span class="todo-table-sub">${escapeHtml(item.order_item_id)}</span></td>
-                      <td><span class="todo-table-main">${escapeHtml(item.character_name)}</span><span class="todo-table-sub">${escapeHtml(item.character_id)}</span></td>
+                      <td><span class="todo-table-main">${escapeHtml(item.entitlement_type === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : item.character_name)}</span><span class="todo-table-sub">${escapeHtml(item.entitlement_type === "FEATURE" ? item.feature_id : item.character_id)}</span></td>
                       <td>${numberValue(item.quantity)}</td>
                       <td>${codeMetrics(item)}</td>
                       <td>${statusBadge(codeStatus(item))}</td>
@@ -712,7 +716,7 @@
           </td>
           <td>${escapeHtml(entry.buyer_email_mask)}</td>
           <td>
-            <span class="todo-table-main">캐릭터 ${numberValue(entry.character_count)}종</span>
+            <span class="todo-table-main">상품 ${numberValue(entry.item_count)}종</span>
             <span class="todo-table-sub">총 ${numberValue(entry.total_quantity)}개 코드</span>
           </td>
           <td>${codeMetrics(entry)}</td>
@@ -787,7 +791,7 @@
   function renderHistory(data) {
     const item = data.item || {};
     const issuances = Array.isArray(data.issuances) ? data.issuances : [];
-    byId("historyTitle").textContent = `${item.character_name || item.character_id || "캐릭터"} · ${data.issuanceCount || 0}회 발급`;
+    byId("historyTitle").textContent = `${item.entitlement_type === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : (item.character_name || item.character_id || "캐릭터")} · ${data.issuanceCount || 0}회 발급`;
     byId("historySummary").textContent = `${item.external_order_id || "-"} · ${item.buyer_email_mask || "-"} · 주문 수량 ${numberValue(item.quantity)}`;
     if (!issuances.length) {
       byId("historyBody").innerHTML = '<p class="todo-empty">발급 이력이 없습니다.</p>';
@@ -1245,11 +1249,16 @@
     event.preventDefault();
     if (!orderForm.reportValidity()) return;
     const itemRows = [...byId("orderItems").querySelectorAll(".todo-order-item")];
-    const items = itemRows.map((row) => ({
-      external_product_order_id: row.querySelector(".todo-item-external-id").value.trim() || undefined,
-      character_id: row.querySelector(".todo-item-character").value,
-      quantity: Number(row.querySelector(".todo-item-quantity").value),
-    }));
+    const items = itemRows.map((row) => {
+      const selectedProduct = row.querySelector(".todo-item-character").value;
+      return {
+        external_product_order_id: row.querySelector(".todo-item-external-id").value.trim() || undefined,
+        ...(selectedProduct === CUSTOMIZATION_OPTION_VALUE
+          ? { entitlement_type: "FEATURE", feature_id: CUSTOMIZATION_FEATURE_ID }
+          : { character_id: selectedProduct }),
+        quantity: Number(row.querySelector(".todo-item-quantity").value),
+      };
+    });
     const totalQuantity = items.reduce((total, item) => total + item.quantity, 0);
     if (totalQuantity > 100) {
       showNotice("한 주문에서 발급할 수 있는 전체 수량은 최대 100개입니다.", "error", true);
@@ -1295,7 +1304,7 @@
   });
 
   byId("copyAllCodesButton").addEventListener("click", () => {
-    const text = state.issuedCodes.map((item) => `${item.characterId}\t${item.code}`).join("\n");
+    const text = state.issuedCodes.map((item) => `${item.entitlementType === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : item.characterId}\t${item.code}`).join("\n");
     copyText(text, "전체 발급 코드를 복사했습니다.");
   });
 

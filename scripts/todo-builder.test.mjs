@@ -36,15 +36,14 @@ test("캐릭터 제작·관리와 주문·코드를 전체 폭 작업 화면으�
   assert.doesNotMatch(html, /class="todo-layout"/);
 });
 
-test("캐릭터 편집기가 기본정보·이미지·음성·미리보기 단계를 제공한다", () => {
+test("캐릭터 편집기가 기본정보·행동 구성·미리보기 단계를 제공한다", () => {
   const html = read("docs/todo-builder/index.html");
-  for (const tab of ["basic", "images", "audio", "preview"]) {
+  for (const tab of ["basic", "actions", "preview"]) {
     assert.match(html, new RegExp(`data-editor-tab="${tab}"`));
     assert.match(html, new RegExp(`data-editor-panel="${tab}"`));
   }
   for (const id of [
-    "characterImageSlots",
-    "characterAudioSlots",
+    "characterActionSlots",
     "previewActionButtons",
     "previewCanvas",
     "publishDialog",
@@ -60,8 +59,9 @@ test("실제 PC 앱 액션과 패치 버전 게시 UI를 사용한다", () => {
   for (const action of ["default", "overdue", "delete", "idle", "done", "add", "work", "pause", "timer_done", "open", "closed"]) {
     assert.match(source, new RegExp(`id: "${action}"`));
   }
-  assert.match(source, /const CURRENT_APP_VERSION = "0\.6\.7"/);
-  assert.match(source, /parts\[2\] \+ 1/);
+  assert.match(source, /async function loadPublicationPlan\(\)/);
+  assert.match(source, /data\.currentVersion/);
+  assert.match(source, /data\.nextVersion/);
   assert.match(html, /id="nextAppVersion"[^>]*readonly/);
   assert.match(html, /id="confirmPublishButton" disabled/);
 });
@@ -94,6 +94,15 @@ test("todo-builder가 2단계 CharacterTodo API 계약을 모두 사용한다", 
   assert.match(source, /credentials: "include"/);
   assert.match(source, /request_id: state\.orderRequestId/);
   assert.match(source, /body\.request_id = action\.requestId/);
+});
+
+test("주문 상품 선택에 커스텀 기능 이용권을 고정 제공하고 기능 상품 계약으로 전송한다", () => {
+  const source = read("docs/todo-builder/todo-builder.js");
+  assert.match(source, /CUSTOMIZATION_OPTION_VALUE = `feature:\$\{CUSTOMIZATION_FEATURE_ID\}`/);
+  assert.match(source, /CUSTOMIZATION_PRODUCT_LABEL = "커스텀 기능 영구 이용권"/);
+  assert.match(source, /entitlement_type: "FEATURE"/);
+  assert.match(source, /feature_id: CUSTOMIZATION_FEATURE_ID/);
+  assert.match(source, /selectedId === CUSTOMIZATION_OPTION_VALUE/);
 });
 
 test("운영 화면은 Worker 비밀값을 포함하지 않고 스크립트 문법이 유효하다", () => {
