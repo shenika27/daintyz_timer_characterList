@@ -262,7 +262,16 @@
           <form id="orderSearchForm" class="todo-search" role="search">
             <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
             <input id="orderSearchInput" type="search" maxlength="100" placeholder="주문번호·이메일·상품 검색">
+            <div class="todo-date-range">
+              <span>발급일</span>
+              <label class="todo-sr-only" for="orderIssuedFrom">발급 시작일</label>
+              <input id="orderIssuedFrom" type="date" title="발급 시작일">
+              <span aria-hidden="true">–</span>
+              <label class="todo-sr-only" for="orderIssuedTo">발급 종료일</label>
+              <input id="orderIssuedTo" type="date" title="발급 종료일">
+            </div>
             <button class="todo-button todo-button-secondary" type="submit">검색</button>
+            <button class="todo-button todo-button-ghost" type="button" id="resetOrderFiltersButton">초기화</button>
             <button class="todo-button todo-button-ghost" type="button" id="refreshOrdersButton">새로고침</button>
           </form>
         </div>

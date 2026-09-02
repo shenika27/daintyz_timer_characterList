@@ -779,7 +779,15 @@
 
   async function loadOrders() {
     const query = byId("orderSearchInput").value.trim();
-    const data = await api(`/v1/todo/orders?limit=100&q=${encodeURIComponent(query)}`);
+    const issuedFrom = byId("orderIssuedFrom").value;
+    const issuedTo = byId("orderIssuedTo").value;
+    if (issuedFrom && issuedTo && issuedFrom > issuedTo) {
+      throw new Error("발급 시작일은 종료일보다 늦을 수 없습니다.");
+    }
+    const params = new URLSearchParams({ limit: "100", q: query });
+    if (issuedFrom) params.set("issued_from", issuedFrom);
+    if (issuedTo) params.set("issued_to", issuedTo);
+    const data = await api(`/v1/todo/orders?${params.toString()}`);
     state.entries = Array.isArray(data.orders)
       ? data.orders
       : groupLegacyOrderEntries(Array.isArray(data.entries) ? data.entries : []);
@@ -1323,6 +1331,14 @@
   byId("orderSearchForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try { await loadOrders(); } catch (error) { showNotice(error.message, "error", true); }
+  });
+
+  byId("resetOrderFiltersButton").addEventListener("click", async () => {
+    byId("orderSearchInput").value = "";
+    byId("orderIssuedFrom").value = "";
+    byId("orderIssuedTo").value = "";
+    try { await loadOrders(); showNotice("주문 검색 조건을 초기화했습니다.", "success"); }
+    catch (error) { showNotice(error.message, "error", true); }
   });
 
   byId("refreshOrdersButton").addEventListener("click", async () => {

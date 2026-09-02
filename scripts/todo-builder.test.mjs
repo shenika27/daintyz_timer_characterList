@@ -18,6 +18,9 @@ test("todo-builder가 판매 캐릭터·최초 발급·발급 원장 화면을 �
     "orderItems",
     "initialCodeResult",
     "orderSearchForm",
+    "orderIssuedFrom",
+    "orderIssuedTo",
+    "resetOrderFiltersButton",
     "orderTableBody",
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
@@ -97,6 +100,17 @@ test("todo-builder가 2단계 CharacterTodo API 계약을 모두 사용한다", 
   assert.match(source, /credentials: "include"/);
   assert.match(source, /request_id: state\.orderRequestId/);
   assert.match(source, /body\.request_id = action\.requestId/);
+});
+
+test("주문 발급일 기간 필터와 초기화를 제공한다", () => {
+  const html = read("docs/todo-builder/index.html");
+  const source = read("docs/todo-builder/todo-builder.js");
+  assert.match(html, /id="orderIssuedFrom" type="date"/);
+  assert.match(html, /id="orderIssuedTo" type="date"/);
+  assert.match(html, /id="resetOrderFiltersButton"/);
+  assert.match(source, /params\.set\("issued_from", issuedFrom\)/);
+  assert.match(source, /params\.set\("issued_to", issuedTo\)/);
+  assert.match(source, /issuedFrom > issuedTo/);
 });
 
 test("주문 상품 선택에 커스텀 기능 이용권을 고정 제공하고 기능 상품 계약으로 전송한다", () => {
