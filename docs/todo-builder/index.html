@@ -64,6 +64,7 @@
               <option value="ARCHIVED">판매 종료</option>
             </select>
           </label>
+          <span class="todo-count todo-draft-count" id="draftCount">초안 0/10</span>
           <span class="todo-count" id="characterCount">0개</span>
         </div>
 
@@ -89,9 +90,8 @@
         <form id="characterForm" class="todo-editor-form">
           <nav class="todo-editor-tabs" aria-label="캐릭터 편집 단계">
             <button type="button" data-editor-tab="basic" aria-selected="true">1. 기본정보</button>
-            <button type="button" data-editor-tab="images" aria-selected="false">2. 이미지</button>
-            <button type="button" data-editor-tab="audio" aria-selected="false">3. 음성</button>
-            <button type="button" data-editor-tab="preview" aria-selected="false">4. 미리보기</button>
+            <button type="button" data-editor-tab="actions" aria-selected="false">2. 행동 구성</button>
+            <button type="button" data-editor-tab="preview" aria-selected="false">3. 미리보기</button>
           </nav>
 
           <section class="todo-editor-panel" data-editor-panel="basic">
@@ -136,33 +136,21 @@
                   <input id="thumbnailInput" type="file" accept=".png,.gif,image/png,image/gif">
                 </label>
                 <button class="todo-button todo-button-ghost todo-button-small" type="button" id="removeThumbnailButton" disabled>대표 이미지 삭제</button>
-                <p>캐릭터 목록과 운영 화면에서 사용할 정사각형 이미지를 권장합니다.</p>
+                <p>PNG · GIF 지원 · 캐릭터 목록과 운영 화면에서 사용할 정사각형 이미지를 권장합니다.</p>
               </aside>
             </div>
           </section>
 
-          <section class="todo-editor-panel" data-editor-panel="images" hidden>
+          <section class="todo-editor-panel" data-editor-panel="actions" hidden>
             <div class="todo-editor-section-heading">
               <div>
-                <p class="todo-kicker">ACTION IMAGES</p>
-                <h3>상황별 이미지</h3>
-                <p>PNG 또는 GIF를 올립니다. 기본 이미지는 필수이고 나머지는 없으면 기본 이미지로 대체됩니다.</p>
+                <p class="todo-kicker">ACTION ASSETS</p>
+                <h3>상황별 이미지·음성</h3>
+                <p>각 행동에 이미지와 음성을 함께 구성합니다. 기본 이미지는 필수이며, 선택 이미지가 필요 없으면 ‘이미지 없음’을 체크해 주세요.</p>
               </div>
-              <span class="todo-progress" id="imageProgress">0 / 11</span>
+              <span class="todo-progress" id="actionProgress">결정 0 / 11</span>
             </div>
-            <div class="todo-asset-grid" id="characterImageSlots"></div>
-          </section>
-
-          <section class="todo-editor-panel" data-editor-panel="audio" hidden>
-            <div class="todo-editor-section-heading">
-              <div>
-                <p class="todo-kicker">ACTION AUDIO</p>
-                <h3>상황별 음성·효과음</h3>
-                <p>짧은 WAV 또는 FLAC 파일을 연결하고 바로 재생해 확인합니다.</p>
-              </div>
-              <span class="todo-progress" id="audioProgress">0 / 10</span>
-            </div>
-            <div class="todo-audio-list" id="characterAudioSlots"></div>
+            <div class="todo-action-list" id="characterActionSlots"></div>
           </section>
 
           <section class="todo-editor-panel" data-editor-panel="preview" hidden>
@@ -170,14 +158,29 @@
               <div>
                 <p class="todo-kicker">LIVE PREVIEW</p>
                 <h3>캐릭터 미리보기</h3>
-                <p>상황 버튼을 눌러 연결한 이미지와 음성을 확인합니다.</p>
+                <p>상황 버튼을 눌러 실제 바탕화면에서 할 일 목록과 함께 보이는 모습을 확인합니다.</p>
               </div>
             </div>
             <div class="todo-preview-layout">
               <div class="todo-preview-actions" id="previewActionButtons"></div>
               <div class="todo-preview-stage">
-                <div class="todo-preview-canvas" id="previewCanvas">
-                  <span>이미지를 선택하면 여기에 표시됩니다.</span>
+                <div class="todo-desktop-preview" id="desktopPreview" data-action="default">
+                  <div class="todo-mock-window">
+                    <div class="todo-mock-header">
+                      <strong>오늘 할 일</strong>
+                      <span>9월 2일</span>
+                    </div>
+                    <div class="todo-mock-input">할 일을 입력하세요</div>
+                    <div class="todo-mock-row"><span class="todo-mock-check"></span><span>작업 내용 정리하기</span></div>
+                    <div class="todo-mock-row todo-mock-row-accent"><span class="todo-mock-check"></span><span id="previewTodoLabel">캐릭터 동작 확인하기</span></div>
+                    <div class="todo-mock-timer"><strong>25:00</strong><span>집중 타이머</span></div>
+                  </div>
+                  <div class="todo-mock-character-zone">
+                    <div class="todo-preview-canvas" id="previewCanvas">
+                      <span>이미지를 선택해 주세요.</span>
+                    </div>
+                    <div class="todo-mock-bubble" id="previewBubble">할일 2개</div>
+                  </div>
                 </div>
                 <div class="todo-preview-meta">
                   <strong id="previewActionName">기본</strong>

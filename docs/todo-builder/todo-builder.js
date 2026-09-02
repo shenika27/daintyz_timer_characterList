@@ -72,6 +72,7 @@
     characterDrafts: new Map(),
     imageAssets: new Map(),
     audioAssets: new Map(),
+    omittedImages: new Set(),
     thumbnailAsset: null,
     currentDraftRevision: null,
     previewAction: "default",
@@ -80,6 +81,7 @@
     currentAppVersion: "",
     nextAppVersion: "",
     publishRequestId: "",
+    draftDirty: false,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -214,7 +216,7 @@
   }
 
   function switchEditorTab(tab) {
-    state.activeEditorTab = ["basic", "images", "audio", "preview"].includes(tab) ? tab : "basic";
+    state.activeEditorTab = ["basic", "actions", "preview"].includes(tab) ? tab : "basic";
     document.querySelectorAll("[data-editor-tab]").forEach((button) => {
       button.setAttribute("aria-selected", String(button.dataset.editorTab === state.activeEditorTab));
     });
@@ -239,6 +241,7 @@
   function clearEditorAssets() {
     state.imageAssets = new Map();
     state.audioAssets = new Map();
+    state.omittedImages = new Set();
     state.thumbnailAsset = null;
     if (state.playingAudio) {
       state.playingAudio.pause();
@@ -263,6 +266,7 @@
       thumbnail: state.thumbnailAsset,
       images: new Map(state.imageAssets),
       audio: new Map(state.audioAssets),
+      omittedImages: new Set(state.omittedImages),
       revision: state.currentDraftRevision,
     });
   }
@@ -272,6 +276,7 @@
     state.thumbnailAsset = draft?.thumbnail || null;
     state.imageAssets = new Map(draft?.images || []);
     state.audioAssets = new Map(draft?.audio || []);
+    state.omittedImages = new Set(draft?.omittedImages || []);
     state.currentDraftRevision = draft?.revision || null;
     byId("characterDescription").value = draft?.description || "";
   }
@@ -283,6 +288,7 @@
       thumbnail: assets.thumbnail ? { ...assets.thumbnail, local: false } : null,
       images: new Map(Object.entries(assets.images || {}).map(([action, asset]) => [action, { ...asset, local: false }])),
       audio: new Map(Object.entries(assets.audio || {}).map(([action, asset]) => [action, { ...asset, local: false }])),
+      omittedImages: new Set(Array.isArray(assets.omittedImages) ? assets.omittedImages : []),
       revision: character.draft_revision || null,
     };
   }
@@ -318,50 +324,69 @@
     byId("removeThumbnailButton").disabled = false;
   }
 
-  function renderImageSlots() {
-    byId("characterImageSlots").innerHTML = CHARACTER_ACTIONS.map((action) => {
-      const asset = state.imageAssets.get(action.id);
-      return `
-        <article class="todo-asset-card" data-required="${Boolean(action.required)}">
-          <div class="todo-asset-preview" data-image-preview="${escapeHtml(action.id)}">
-            ${asset ? `<img src="${escapeHtml(asset.url)}" alt="${escapeHtml(action.label)} 이미지 미리보기">` : "이미지 없음"}
-          </div>
-          <strong>${escapeHtml(action.label)}${action.required ? " · 필수" : ""}</strong>
-          <p>${escapeHtml(action.description)}</p>
-          <label class="todo-file-button">
-            ${asset ? "파일 교체" : "이미지 선택"}
-            <input type="file" accept=".png,.gif,image/png,image/gif" data-image-input="${escapeHtml(action.id)}">
-          </label>
-          <button class="todo-button todo-button-ghost todo-button-small" type="button" data-remove-image="${escapeHtml(action.id)}"${asset ? "" : " disabled"}>삭제</button>
-          <span class="todo-asset-file-name">${escapeHtml(assetName(asset) || "선택된 파일 없음")}</span>
-        </article>
-      `;
-    }).join("");
-    byId("imageProgress").textContent = `${state.imageAssets.size} / ${CHARACTER_ACTIONS.length}`;
+  function assetFormat(asset, fallback) {
+    const name = assetName(asset);
+    const extension = name.includes(".") ? name.split(".").pop().toUpperCase() : "";
+    return extension || fallback;
   }
 
-  function renderAudioSlots() {
-    byId("characterAudioSlots").innerHTML = AUDIO_ACTIONS.map((action) => {
-      const asset = state.audioAssets.get(action.id);
+  function renderActionSlots() {
+    byId("characterActionSlots").innerHTML = CHARACTER_ACTIONS.map((action) => {
+      const image = state.imageAssets.get(action.id);
+      const audio = state.audioAssets.get(action.id);
+      const omitted = state.omittedImages.has(action.id);
+      const imageState = image ? "attached" : omitted ? "omitted" : "undecided";
       return `
-        <article class="todo-audio-row">
-          <div class="todo-audio-label">
-            <strong>${escapeHtml(action.label)}</strong>
-            <span>${escapeHtml(action.description)}</span>
-          </div>
-          <span class="todo-audio-file">${escapeHtml(assetName(asset) || "연결된 음성 없음")}</span>
-          <div class="todo-audio-actions">
-            <label class="todo-file-button">
-              ${asset ? "교체" : "파일 선택"}
-              <input type="file" accept=".wav,.flac,audio/wav,audio/flac" data-audio-input="${escapeHtml(action.id)}">
-            </label>
-            <button class="todo-button todo-button-secondary todo-button-small" type="button" data-play-audio="${escapeHtml(action.id)}"${asset ? "" : " disabled"}>재생</button>
-            <button class="todo-button todo-button-ghost todo-button-small" type="button" data-remove-audio="${escapeHtml(action.id)}"${asset ? "" : " disabled"}>삭제</button>
+        <article class="todo-action-card" data-required="${Boolean(action.required)}" data-image-state="${imageState}">
+          <header class="todo-action-card-heading">
+            <div>
+              <strong>${escapeHtml(action.label)}${action.required ? " · 필수" : ""}</strong>
+              <p>${escapeHtml(action.description)}</p>
+            </div>
+            <span class="todo-action-state">${image ? "이미지 등록" : omitted ? "기본 이미지 대체" : "이미지 미결정"}</span>
+          </header>
+          <div class="todo-action-assets">
+            <section class="todo-action-image">
+              <div class="todo-asset-preview">
+                ${image ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(action.label)} 이미지 미리보기">` : `<span>${omitted ? "기본 이미지로 표시" : "이미지를 선택해 주세요"}</span>`}
+              </div>
+              <div class="todo-asset-kind"><strong>이미지</strong><span>PNG · GIF${image ? ` · ${escapeHtml(assetFormat(image, "이미지"))}` : ""}</span></div>
+              <div class="todo-action-controls">
+                <label class="todo-file-button">
+                  ${image ? "이미지 교체" : "이미지 선택"}
+                  <input type="file" accept=".png,.gif,image/png,image/gif" data-image-input="${escapeHtml(action.id)}">
+                </label>
+                <button class="todo-button todo-button-ghost todo-button-small" type="button" data-remove-image="${escapeHtml(action.id)}"${image ? "" : " disabled"}>삭제</button>
+              </div>
+              <span class="todo-asset-file-name">${escapeHtml(assetName(image) || (omitted ? "의도적으로 등록하지 않음" : "선택된 파일 없음"))}</span>
+              ${action.required ? '<span class="todo-required-note">기본 이미지는 반드시 등록해야 합니다.</span>' : `
+                <label class="todo-omit-check">
+                  <input type="checkbox" data-omit-image="${escapeHtml(action.id)}"${omitted ? " checked" : ""}>
+                  <span>이미지 없음</span>
+                </label>
+              `}
+            </section>
+            <section class="todo-action-audio">
+              <div class="todo-asset-kind"><strong>음성·효과음</strong><span>${action.id === "default" ? "기본 상황은 음성 없음" : `WAV · FLAC${audio ? ` · ${escapeHtml(assetFormat(audio, "음성"))}` : ""}`}</span></div>
+              ${action.id === "default" ? '<p class="todo-audio-empty">기본 이미지는 반복 표시되므로 별도 음성을 재생하지 않습니다.</p>' : `
+                <span class="todo-audio-file">${escapeHtml(assetName(audio) || "연결된 음성 없음")}</span>
+                <div class="todo-audio-actions">
+                  <label class="todo-file-button">
+                    ${audio ? "음성 교체" : "음성 선택"}
+                    <input type="file" accept=".wav,.flac,audio/wav,audio/flac" data-audio-input="${escapeHtml(action.id)}">
+                  </label>
+                  <button class="todo-button todo-button-secondary todo-button-small" type="button" data-play-audio="${escapeHtml(action.id)}"${audio ? "" : " disabled"}>재생</button>
+                  <button class="todo-button todo-button-ghost todo-button-small" type="button" data-remove-audio="${escapeHtml(action.id)}"${audio ? "" : " disabled"}>삭제</button>
+                </div>
+              `}
+            </section>
           </div>
         </article>
       `;
     }).join("");
-    byId("audioProgress").textContent = `${state.audioAssets.size} / ${AUDIO_ACTIONS.length}`;
+    const decided = CHARACTER_ACTIONS.filter((action) => state.imageAssets.has(action.id)
+      || state.omittedImages.has(action.id)).length;
+    byId("actionProgress").textContent = `결정 ${decided} / ${CHARACTER_ACTIONS.length} · 음성 ${state.audioAssets.size}`;
   }
 
   function renderPreviewButtons() {
@@ -377,13 +402,22 @@
   function renderPreview() {
     renderPreviewButtons();
     const action = CHARACTER_ACTIONS.find((item) => item.id === state.previewAction) || CHARACTER_ACTIONS[0];
+    const directImageAsset = state.imageAssets.get(action.id);
     const imageAsset = resolvedImageAsset(action.id);
     const audioAsset = state.audioAssets.get(action.id);
     byId("previewActionName").textContent = action.label;
-    byId("previewFileName").textContent = assetName(imageAsset) || "연결된 이미지 없음";
+    byId("previewFileName").textContent = directImageAsset
+      ? assetName(directImageAsset)
+      : imageAsset ? `${assetName(imageAsset)} · 기본 이미지로 대체` : "연결된 이미지 없음";
     byId("previewCanvas").innerHTML = imageAsset
       ? `<img src="${escapeHtml(imageAsset.url)}" alt="${escapeHtml(action.label)} 캐릭터 미리보기">`
-      : "<span>이미지를 선택하면 여기에 표시됩니다.</span>";
+      : "<span>기본 이미지를 선택해 주세요.</span>";
+    byId("desktopPreview").dataset.action = action.id;
+    byId("previewTodoLabel").textContent = action.id === "done" ? "완료한 할 일"
+      : action.id === "add" ? "방금 추가한 할 일"
+        : action.id === "overdue" ? "기한이 지난 할 일" : "캐릭터 동작 확인하기";
+    byId("previewBubble").textContent = ["work", "pause", "timer_done"].includes(action.id)
+      ? "25:00" : action.id === "overdue" ? "밀린 할일 1개" : "할일 2개";
     byId("previewAudioButton").disabled = !audioAsset;
   }
 
@@ -405,9 +439,9 @@
     state.previewAction = "default";
     updateEditorHeading(character);
     renderThumbnail();
-    renderImageSlots();
-    renderAudioSlots();
+    renderActionSlots();
     renderPreview();
+    state.draftDirty = false;
     switchEditorTab("basic");
     byId("characterLibraryScreen").hidden = true;
     byId("characterEditorScreen").hidden = false;
@@ -430,6 +464,12 @@
       const matchesQuery = !query || `${character.id} ${character.name}`.toLowerCase().includes(query);
       return matchesQuery && (!status || character.status === status);
     });
+    const draftCount = state.characters.filter((character) => character.status === "DRAFT").length;
+    const draftLimitReached = draftCount >= 10;
+    byId("draftCount").textContent = `초안 ${draftCount}/10`;
+    byId("draftCount").dataset.full = String(draftLimitReached);
+    byId("newCharacterButton").disabled = draftLimitReached;
+    byId("newCharacterButton").title = draftLimitReached ? "초안 캐릭터는 최대 10개까지 만들 수 있습니다." : "";
     byId("characterCount").textContent = filtered.length === state.characters.length
       ? `${state.characters.length}개`
       : `${filtered.length} / ${state.characters.length}개`;
@@ -440,7 +480,7 @@
             <div class="todo-library-empty-mark">✦</div>
             <h3>${state.characters.length ? "조건에 맞는 캐릭터가 없습니다." : "첫 캐릭터를 만들어 보세요."}</h3>
             <p>${state.characters.length ? "검색어나 상태 필터를 바꿔 주세요." : "기본정보와 상황별 이미지·음성을 한 화면에서 구성할 수 있습니다."}</p>
-            <button class="todo-button todo-button-primary" type="button" data-new-character>+ 새 캐릭터</button>
+            <button class="todo-button todo-button-primary" type="button" data-new-character${draftLimitReached ? " disabled" : ""}>+ 새 캐릭터</button>
           </div>
         </div>
       `;
@@ -804,6 +844,7 @@
       const keepSlots = [];
       const draftBody = new FormData();
       draftBody.set("description", byId("characterDescription").value.trim());
+      draftBody.set("omitted_images", JSON.stringify([...state.omittedImages]));
       if (state.currentDraftRevision) draftBody.set("expected_revision", state.currentDraftRevision);
       if (state.thumbnailAsset) {
         keepSlots.push("thumbnail");
@@ -832,9 +873,9 @@
       state.characterDrafts.set(payload.id, draftFromCharacter(savedCharacter));
       loadCharacterDraft(payload.id);
       renderThumbnail();
-      renderImageSlots();
-      renderAudioSlots();
+      renderActionSlots();
       renderPreview();
+      state.draftDirty = false;
       updateEditorHeading(savedCharacter);
       byId("characterDraftMessage").textContent = `서버에 초안을 저장했습니다. ${formatDateTime(savedCharacter.draft_saved_at)}`;
       showNotice("캐릭터 기본정보와 이미지·음원 초안을 저장했습니다.", "success");
@@ -847,6 +888,7 @@
 
   byId("characterList").addEventListener("click", (event) => {
     if (event.target.closest("[data-new-character]")) {
+      if (state.characters.filter((character) => character.status === "DRAFT").length >= 10) return;
       openCharacterEditor();
       return;
     }
@@ -863,7 +905,10 @@
   document.querySelectorAll("[data-editor-tab]").forEach((button) => {
     button.addEventListener("click", () => switchEditorTab(button.dataset.editorTab));
   });
-  byId("newCharacterButton").addEventListener("click", () => openCharacterEditor());
+  byId("newCharacterButton").addEventListener("click", () => {
+    if (state.characters.filter((character) => character.status === "DRAFT").length < 10) openCharacterEditor();
+  });
+  characterForm.addEventListener("input", () => { state.draftDirty = true; });
   byId("backToCharactersButton").addEventListener("click", backToCharacterLibrary);
   byId("characterSearchInput").addEventListener("input", renderCharacters);
   byId("characterStatusFilter").addEventListener("change", renderCharacters);
@@ -883,6 +928,7 @@
     }
     revokeAsset(state.thumbnailAsset);
     state.thumbnailAsset = localAsset(file);
+    state.draftDirty = true;
     renderThumbnail();
   });
 
@@ -890,52 +936,65 @@
     revokeAsset(state.thumbnailAsset);
     state.thumbnailAsset = null;
     byId("thumbnailInput").value = "";
+    state.draftDirty = true;
     renderThumbnail();
   });
 
-  byId("characterImageSlots").addEventListener("change", (event) => {
+  byId("characterActionSlots").addEventListener("change", (event) => {
     const input = event.target.closest("[data-image-input]");
-    const file = input?.files?.[0];
-    if (!input || !file) return;
-    if (!/\.(png|gif)$/i.test(file.name)) {
-      showNotice("상황별 이미지는 PNG 또는 GIF만 사용할 수 있습니다.", "error", true);
-      input.value = "";
+    const omitInput = event.target.closest("[data-omit-image]");
+    const audioInput = event.target.closest("[data-audio-input]");
+    if (input) {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!/\.(png|gif)$/i.test(file.name)) {
+        showNotice("상황별 이미지는 PNG 또는 GIF만 사용할 수 있습니다.", "error", true);
+        input.value = "";
+        return;
+      }
+      revokeAsset(state.imageAssets.get(input.dataset.imageInput));
+      state.imageAssets.set(input.dataset.imageInput, localAsset(file));
+      state.omittedImages.delete(input.dataset.imageInput);
+    } else if (omitInput) {
+      const actionId = omitInput.dataset.omitImage;
+      if (omitInput.checked) {
+        revokeAsset(state.imageAssets.get(actionId));
+        state.imageAssets.delete(actionId);
+        state.omittedImages.add(actionId);
+      } else {
+        state.omittedImages.delete(actionId);
+      }
+    } else if (audioInput) {
+      const file = audioInput.files?.[0];
+      if (!file) return;
+      if (!/\.(wav|flac)$/i.test(file.name)) {
+        showNotice("음성 파일은 WAV 또는 FLAC만 사용할 수 있습니다.", "error", true);
+        audioInput.value = "";
+        return;
+      }
+      revokeAsset(state.audioAssets.get(audioInput.dataset.audioInput));
+      state.audioAssets.set(audioInput.dataset.audioInput, localAsset(file));
+    } else {
       return;
     }
-    revokeAsset(state.imageAssets.get(input.dataset.imageInput));
-    state.imageAssets.set(input.dataset.imageInput, localAsset(file));
-    renderImageSlots();
+    state.draftDirty = true;
+    renderActionSlots();
     renderPreview();
   });
 
-  byId("characterImageSlots").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-remove-image]");
-    if (!button) return;
-    const actionId = button.dataset.removeImage;
-    revokeAsset(state.imageAssets.get(actionId));
-    state.imageAssets.delete(actionId);
-    renderImageSlots();
-    renderPreview();
-  });
-
-  byId("characterAudioSlots").addEventListener("change", (event) => {
-    const input = event.target.closest("[data-audio-input]");
-    const file = input?.files?.[0];
-    if (!input || !file) return;
-    if (!/\.(wav|flac)$/i.test(file.name)) {
-      showNotice("음성 파일은 WAV 또는 FLAC만 사용할 수 있습니다.", "error", true);
-      input.value = "";
-      return;
-    }
-    revokeAsset(state.audioAssets.get(input.dataset.audioInput));
-    state.audioAssets.set(input.dataset.audioInput, localAsset(file));
-    renderAudioSlots();
-    renderPreview();
-  });
-
-  byId("characterAudioSlots").addEventListener("click", (event) => {
+  byId("characterActionSlots").addEventListener("click", (event) => {
+    const removeImageButton = event.target.closest("[data-remove-image]");
     const playButton = event.target.closest("[data-play-audio]");
     const removeButton = event.target.closest("[data-remove-audio]");
+    if (removeImageButton) {
+      const actionId = removeImageButton.dataset.removeImage;
+      revokeAsset(state.imageAssets.get(actionId));
+      state.imageAssets.delete(actionId);
+      state.draftDirty = true;
+      renderActionSlots();
+      renderPreview();
+      return;
+    }
     if (playButton) {
       const asset = state.audioAssets.get(playButton.dataset.playAudio);
       if (!asset) return;
@@ -948,7 +1007,8 @@
       const actionId = removeButton.dataset.removeAudio;
       revokeAsset(state.audioAssets.get(actionId));
       state.audioAssets.delete(actionId);
-      renderAudioSlots();
+      state.draftDirty = true;
+      renderActionSlots();
       renderPreview();
     }
   });
@@ -975,10 +1035,15 @@
     if (!/^[a-z0-9][a-z0-9_-]{1,63}$/.test(id)) errors.push("캐릭터 ID 형식을 확인해 주세요.");
     if (!name) errors.push("표시 이름을 입력해 주세요.");
     if (!state.imageAssets.has("default")) errors.push("필수 기본 이미지를 등록해 주세요.");
+    CHARACTER_ACTIONS.filter((action) => action.id !== "default").forEach((action) => {
+      if (!state.imageAssets.has(action.id) && !state.omittedImages.has(action.id)) {
+        errors.push(`${action.label} 이미지를 등록하거나 ‘이미지 없음’을 선택해 주세요.`);
+      }
+    });
     const hasUnsavedFiles = state.thumbnailAsset?.local
       || [...state.imageAssets.values()].some((asset) => asset.local)
       || [...state.audioAssets.values()].some((asset) => asset.local);
-    if (!state.editingCharacterId || !state.currentDraftRevision || hasUnsavedFiles) {
+    if (!state.editingCharacterId || !state.currentDraftRevision || hasUnsavedFiles || state.draftDirty) {
       errors.push("현재 변경사항을 초안 저장한 뒤 게시해 주세요.");
     }
     return errors;
@@ -994,7 +1059,7 @@
   byId("validateCharacterButton").addEventListener("click", () => {
     const errors = validateCharacter();
     showNotice(errors.length ? `게시 전 ${errors.length}개 항목을 확인해 주세요.` : "게시 검증을 통과했습니다.", errors.length ? "error" : "success", Boolean(errors.length));
-    if (errors.some((error) => error.includes("기본 이미지"))) switchEditorTab("images");
+    if (errors.some((error) => error.includes("이미지"))) switchEditorTab("actions");
     else if (errors.length) switchEditorTab("basic");
   });
 
