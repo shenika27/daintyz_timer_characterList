@@ -71,7 +71,7 @@
     orderRequestId: "",
     issuedCodes: [],
     reissuedCode: "",
-    currentOrderItemId: "",
+    currentOrderUnitId: "",
     pendingAction: null,
     noticeTimer: 0,
     nextOrderItemId: 1,
@@ -661,6 +661,14 @@
       </span>`;
   }
 
+  function unitCodeStatus(unit) {
+    if (unit.unit_status === "REFUNDED") return "REFUNDED";
+    if (unit.current_code_status === "REDEEMED") return "REDEEMED";
+    if (unit.current_code_status === "REVOKED") return "REVOKED";
+    if (unit.current_code_status === "ISSUED" && unit.is_redeemable) return "AVAILABLE";
+    return unit.current_code_status || "REVOKED";
+  }
+
   function renderOrderItems(order) {
     const items = Array.isArray(order.items) ? order.items : [];
     return `
@@ -670,25 +678,29 @@
             <div class="todo-order-detail-heading">
               <div>
                 <strong>상품별 코드 현황</strong>
-                <span>${items.length}종 · 총 ${numberValue(order.total_quantity)}개</span>
+                <span>${items.length}종 · 발급 단위 ${numberValue(order.total_quantity)}개</span>
               </div>
-              <span>상품의 발급 횟수를 누르면 코드별 이력이 열립니다.</span>
+              <span>각 발급 단위의 이력에서 재발급·폐기·환불을 처리할 수 있습니다.</span>
             </div>
             <div class="todo-order-item-table-wrap">
               <table class="todo-order-item-table">
-                <thead><tr><th>상품주문번호</th><th>상품</th><th>수량</th><th>코드 현황</th><th>상태</th><th>발급 이력</th></tr></thead>
-                <tbody>${items.map((item) => {
-                  const itemId = encodeURIComponent(item.order_item_id || "");
-                  const issuanceCount = numberValue(item.issuance_count);
-                  return `
+                <thead><tr><th>상품주문번호</th><th>상품</th><th>발급 단위</th><th>현재 코드</th><th>상태</th><th>발급 이력</th></tr></thead>
+                <tbody>${items.flatMap((item) => {
+                  const units = Array.isArray(item.units) ? item.units : [];
+                  return units.map((unit) => {
+                    const unitId = encodeURIComponent(unit.order_unit_id || "");
+                    const issuanceCount = numberValue(unit.issuance_count);
+                    const status = unitCodeStatus(unit);
+                    return `
                     <tr>
                       <td><span class="todo-table-main">${escapeHtml(item.external_product_order_id || "미입력")}</span><span class="todo-table-sub">${escapeHtml(item.order_item_id)}</span></td>
                       <td><span class="todo-table-main">${escapeHtml(item.entitlement_type === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : item.character_name)}</span><span class="todo-table-sub">${escapeHtml(item.entitlement_type === "FEATURE" ? item.feature_id : item.character_id)}</span></td>
-                      <td>${numberValue(item.quantity)}</td>
-                      <td>${codeMetrics(item)}</td>
-                      <td>${statusBadge(codeStatus(item))}</td>
-                      <td><button class="todo-history-link" type="button" data-history-item="${escapeHtml(itemId)}"${issuanceCount ? "" : " disabled"}>${issuanceCount}회</button></td>
+                      <td><span class="todo-table-main">${numberValue(unit.unit_no)} / ${numberValue(item.quantity)}</span><span class="todo-table-sub">${escapeHtml(unit.order_unit_id)}</span></td>
+                      <td><span class="todo-code-mask">${escapeHtml(unit.current_code_mask || "-")}</span></td>
+                      <td>${statusBadge(status, status === "REFUNDED" ? "환불" : undefined)}</td>
+                      <td><button class="todo-history-link" type="button" data-history-unit="${escapeHtml(unitId)}"${issuanceCount ? "" : " disabled"}>${issuanceCount}회</button></td>
                     </tr>`;
+                  });
                 }).join("")}</tbody>
               </table>
             </div>
@@ -792,7 +804,7 @@
     const item = data.item || {};
     const issuances = Array.isArray(data.issuances) ? data.issuances : [];
     byId("historyTitle").textContent = `${item.entitlement_type === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : (item.character_name || item.character_id || "캐릭터")} · ${data.issuanceCount || 0}회 발급`;
-    byId("historySummary").textContent = `${item.external_order_id || "-"} · ${item.buyer_email_mask || "-"} · 주문 수량 ${numberValue(item.quantity)}`;
+    byId("historySummary").textContent = `${item.external_order_id || "-"} · ${item.buyer_email_mask || "-"} · 발급 단위 ${numberValue(item.unit_no)} / ${numberValue(item.quantity)}`;
     if (!issuances.length) {
       byId("historyBody").innerHTML = '<p class="todo-empty">발급 이력이 없습니다.</p>';
       return;
@@ -805,7 +817,7 @@
       return `
         <article class="todo-history-item">
           <div class="todo-history-top">
-            <span class="todo-history-title">수량 ${numberValue(issuance.unit_no)} · ${numberValue(issuance.sequence_no)}회차</span>
+            <span class="todo-history-title">${numberValue(issuance.sequence_no)}회차 발급</span>
             ${currentLabel}
           </div>
           <div class="todo-history-code">${escapeHtml(issuance.code_mask)}</div>
@@ -823,14 +835,14 @@
     }).join("")}</div>`;
   }
 
-  async function loadHistory(orderItemId, openDialog = true) {
-    state.currentOrderItemId = orderItemId;
+  async function loadHistory(orderUnitId, openDialog = true) {
+    state.currentOrderUnitId = orderUnitId;
     byId("historyTitle").textContent = "코드 발급 이력";
     byId("historySummary").textContent = "불러오는 중…";
     byId("historyBody").innerHTML = '<p class="todo-empty">발급 이력을 불러오는 중입니다.</p>';
     if (openDialog && !historyDialog.open) historyDialog.showModal();
     try {
-      const data = await api(`/v1/todo/order-items/${encodeURIComponent(orderItemId)}/issuances`);
+      const data = await api(`/v1/todo/order-units/${encodeURIComponent(orderUnitId)}/issuances`);
       renderHistory(data);
     } catch (error) {
       byId("historyBody").innerHTML = `<p class="todo-empty">${escapeHtml(error.message)}</p>`;
@@ -898,7 +910,7 @@
       }
       try {
         await loadOrders();
-        if (action.type !== "reissue") await loadHistory(state.currentOrderItemId, false);
+        if (action.type !== "reissue") await loadHistory(state.currentOrderUnitId, false);
       } catch (refreshError) {
         showNotice(`처리는 완료됐지만 목록 새로고침에 실패했습니다: ${refreshError.message}`, "error", true);
       }
@@ -1337,9 +1349,9 @@
   });
 
   byId("orderTableBody").addEventListener("click", (event) => {
-    const historyButton = event.target.closest("[data-history-item]");
+    const historyButton = event.target.closest("[data-history-unit]");
     if (historyButton) {
-      loadHistory(decodeURIComponent(historyButton.dataset.historyItem));
+      loadHistory(decodeURIComponent(historyButton.dataset.historyUnit));
       return;
     }
     const toggleButton = event.target.closest("[data-order-toggle]");

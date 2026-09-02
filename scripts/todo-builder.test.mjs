@@ -74,7 +74,11 @@ test("발급 횟수 이력과 재발급·폐기·환불 대화상자를 제공�
   assert.match(html, /aria-live="polite"/);
 
   const source = read("docs/todo-builder/todo-builder.js");
-  assert.match(source, /data-history-item/);
+  assert.match(source, /data-history-unit/);
+  assert.match(source, /item\.units/);
+  assert.match(source, /unit\.unit_no/);
+  assert.match(source, /unit\.current_code_mask/);
+  assert.match(source, /\/v1\/todo\/order-units\/\$\{encodeURIComponent\(orderUnitId\)\}\/issuances/);
   assert.match(source, /data-history-action="reissue"/);
   assert.match(source, /data-history-action="revoke"/);
   assert.match(source, /data-history-action="refund"/);
@@ -85,7 +89,6 @@ test("todo-builder가 2단계 CharacterTodo API 계약을 모두 사용한다", 
   for (const endpoint of [
     "/v1/todo/characters",
     "/v1/todo/orders",
-    "/v1/todo/order-items/",
     "/v1/todo/issuances/",
     "/v1/todo/order-units/",
   ]) {

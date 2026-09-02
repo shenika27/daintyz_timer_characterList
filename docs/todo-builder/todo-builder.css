@@ -1084,6 +1084,14 @@
   white-space: nowrap;
 }
 
+.todo-code-mask {
+  color: var(--shell-ink);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .todo-history-link {
   padding: 4px 8px;
   border: 1px solid #cdd5f7;
