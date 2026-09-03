@@ -62,6 +62,7 @@
     { id: "timer_done", label: "타이머 완료", description: "타이머 종료 리액션" },
     { id: "open", label: "목록 열림", description: "할일 목록을 열 때" },
     { id: "closed", label: "목록 닫힘", description: "할일 목록을 닫을 때" },
+    { id: "typing", label: "타이핑", description: "키를 누르고 있는 동안" },
   ]);
   const AUDIO_ACTIONS = Object.freeze(CHARACTER_ACTIONS.filter((action) => action.id !== "default"));
   const state = {
@@ -91,6 +92,8 @@
     nextAppVersion: "",
     publishRequestId: "",
     draftDirty: false,
+    revealedCodes: new Map(),
+    revealIssuanceId: "",
   };
 
   const byId = (id) => document.getElementById(id);
@@ -101,6 +104,7 @@
   const reasonDialog = byId("reasonDialog");
   const codeDialog = byId("codeDialog");
   const publishDialog = byId("publishDialog");
+  const revealDialog = byId("revealDialog");
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -669,6 +673,26 @@
     return unit.current_code_status || "REVOKED";
   }
 
+  function renderCurrentCode(unit) {
+    const issuanceId = String(unit.current_issuance_id || "");
+    if (!issuanceId) return '<span class="todo-code-mask">-</span>';
+    const encodedId = encodeURIComponent(issuanceId);
+    const revealed = state.revealedCodes.get(issuanceId);
+    if (revealed) {
+      return `<span class="todo-current-code" data-revealed="true">
+        <code>${escapeHtml(revealed)}</code>
+        <button class="todo-code-action" type="button" data-copy-code="${escapeHtml(encodedId)}">복사</button>
+        <button class="todo-code-action" type="button" data-hide-code="${escapeHtml(encodedId)}">가리기</button>
+      </span>`;
+    }
+    return `<span class="todo-current-code">
+      <span class="todo-code-mask">${escapeHtml(unit.current_code_mask || "-")}</span>
+      <button class="todo-code-eye" type="button" data-reveal-code="${escapeHtml(encodedId)}" aria-label="현재 코드 원문 보기" title="현재 코드 보기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/></svg>
+      </button>
+    </span>`;
+  }
+
   function renderOrderItems(order) {
     const items = Array.isArray(order.items) ? order.items : [];
     return `
@@ -696,7 +720,7 @@
                       <td><span class="todo-table-main">${escapeHtml(item.external_product_order_id || "미입력")}</span><span class="todo-table-sub">${escapeHtml(item.order_item_id)}</span></td>
                       <td><span class="todo-table-main">${escapeHtml(item.entitlement_type === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : item.character_name)}</span><span class="todo-table-sub">${escapeHtml(item.entitlement_type === "FEATURE" ? item.feature_id : item.character_id)}</span></td>
                       <td><span class="todo-table-main">${numberValue(unit.unit_no)} / ${numberValue(item.quantity)}</span><span class="todo-table-sub">${escapeHtml(unit.order_unit_id)}</span></td>
-                      <td><span class="todo-code-mask">${escapeHtml(unit.current_code_mask || "-")}</span></td>
+                      <td>${renderCurrentCode(unit)}</td>
                       <td>${statusBadge(status, status === "REFUNDED" ? "환불" : undefined)}</td>
                       <td><button class="todo-history-link" type="button" data-history-unit="${escapeHtml(unitId)}"${issuanceCount ? "" : " disabled"}>${issuanceCount}회</button></td>
                     </tr>`;
@@ -788,12 +812,59 @@
     if (issuedFrom) params.set("issued_from", issuedFrom);
     if (issuedTo) params.set("issued_to", issuedTo);
     const data = await api(`/v1/todo/orders?${params.toString()}`);
+    state.revealedCodes.clear();
     state.entries = Array.isArray(data.orders)
       ? data.orders
       : groupLegacyOrderEntries(Array.isArray(data.entries) ? data.entries : []);
     const visibleIds = new Set(state.entries.map((entry) => String(entry.order_id || "")));
     state.expandedOrderIds = new Set([...state.expandedOrderIds].filter((id) => visibleIds.has(id)));
     renderOrders();
+  }
+
+  function closeRevealDialog() {
+    byId("revealPasswordInput").value = "";
+    byId("revealError").textContent = "";
+    byId("revealError").hidden = true;
+    state.revealIssuanceId = "";
+    revealDialog.close();
+  }
+
+  function openRevealDialog(issuanceId, codeMask) {
+    state.revealIssuanceId = issuanceId;
+    byId("revealPasswordInput").value = "";
+    byId("revealError").textContent = "";
+    byId("revealError").hidden = true;
+    byId("revealSummary").textContent = `${codeMask || "현재 코드"}의 원문을 확인하려면 관리자 비밀번호를 입력해 주세요.`;
+    revealDialog.showModal();
+    window.setTimeout(() => byId("revealPasswordInput").focus(), 0);
+  }
+
+  async function submitReveal(event) {
+    event.preventDefault();
+    const issuanceId = state.revealIssuanceId;
+    const passwordInput = byId("revealPasswordInput");
+    const errorElement = byId("revealError");
+    const button = byId("confirmRevealButton");
+    if (!issuanceId) return;
+    errorElement.hidden = true;
+    setButtonBusy(button, true, "확인 중…");
+    try {
+      const result = await api(`/v1/todo/issuances/${encodeURIComponent(issuanceId)}/reveal`, {
+        method: "POST",
+        body: { password: passwordInput.value },
+      });
+      state.revealedCodes.set(issuanceId, result.code);
+      closeRevealDialog();
+      renderOrders();
+      showNotice("현재 코드 원문을 표시했습니다.", "success");
+    } catch (error) {
+      passwordInput.value = "";
+      errorElement.textContent = error.message;
+      errorElement.hidden = false;
+      passwordInput.focus();
+    } finally {
+      setButtonBusy(button, false);
+    }
   }
 
   function historyActionButtons(issuance) {
@@ -1365,6 +1436,25 @@
   });
 
   byId("orderTableBody").addEventListener("click", (event) => {
+    const revealButton = event.target.closest("[data-reveal-code]");
+    if (revealButton) {
+      const issuanceId = decodeURIComponent(revealButton.dataset.revealCode || "");
+      const codeMask = revealButton.closest(".todo-current-code")?.querySelector(".todo-code-mask")?.textContent || "";
+      openRevealDialog(issuanceId, codeMask);
+      return;
+    }
+    const copyButton = event.target.closest("[data-copy-code]");
+    if (copyButton) {
+      const issuanceId = decodeURIComponent(copyButton.dataset.copyCode || "");
+      copyText(state.revealedCodes.get(issuanceId), "현재 코드를 복사했습니다.");
+      return;
+    }
+    const hideButton = event.target.closest("[data-hide-code]");
+    if (hideButton) {
+      state.revealedCodes.delete(decodeURIComponent(hideButton.dataset.hideCode || ""));
+      renderOrders();
+      return;
+    }
     const historyButton = event.target.closest("[data-history-unit]");
     if (historyButton) {
       loadHistory(decodeURIComponent(historyButton.dataset.historyUnit));
@@ -1394,6 +1484,9 @@
   byId("closeHistoryButton").addEventListener("click", () => historyDialog.close());
   byId("closeCodeButton").addEventListener("click", () => codeDialog.close());
   byId("copyReissuedCodeButton").addEventListener("click", () => copyText(state.reissuedCode, "새 코드를 복사했습니다."));
+  byId("revealForm").addEventListener("submit", submitReveal);
+  byId("closeRevealButton").addEventListener("click", closeRevealDialog);
+  byId("cancelRevealButton").addEventListener("click", closeRevealDialog);
 
   byId("logoutButton").addEventListener("click", async () => {
     await BuilderAuth.logout();

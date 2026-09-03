@@ -148,7 +148,7 @@
                 <h3>상황별 이미지·음성</h3>
                 <p>각 행동에 이미지와 음성을 함께 구성합니다. 기본 이미지는 필수이며, 선택 이미지가 필요 없으면 ‘이미지 없음’을 체크해 주세요.</p>
               </div>
-              <span class="todo-progress" id="actionProgress">결정 0 / 11</span>
+              <span class="todo-progress" id="actionProgress">결정 0 / 12</span>
             </div>
             <div class="todo-action-list" id="characterActionSlots"></div>
           </section>
@@ -408,6 +408,30 @@
       <div class="todo-single-code" id="reissuedCode"></div>
       <button class="todo-button todo-button-primary" type="button" id="copyReissuedCodeButton">새 코드 복사</button>
     </div>
+  </dialog>
+
+  <dialog class="todo-dialog todo-reveal-dialog" id="revealDialog" aria-labelledby="revealTitle">
+    <form id="revealForm">
+      <div class="todo-dialog-header">
+        <div>
+          <p class="todo-kicker">보안 확인</p>
+          <h2 id="revealTitle">현재 코드 보기</h2>
+          <p class="todo-dialog-summary" id="revealSummary">코드 원문을 확인하려면 관리자 비밀번호를 입력해 주세요.</p>
+        </div>
+        <button class="todo-icon-button" type="button" id="closeRevealButton" aria-label="코드 보기 닫기">×</button>
+      </div>
+      <div class="todo-dialog-body">
+        <label>
+          관리자 비밀번호
+          <input id="revealPasswordInput" type="password" autocomplete="current-password" maxlength="1024" required>
+        </label>
+        <p class="todo-form-error" id="revealError" role="alert" hidden></p>
+        <div class="todo-form-actions todo-dialog-actions">
+          <button class="todo-button todo-button-ghost" type="button" id="cancelRevealButton">취소</button>
+          <button class="todo-button todo-button-primary" type="submit" id="confirmRevealButton">코드 보기</button>
+        </div>
+      </div>
+    </form>
   </dialog>
 
   <script src="../shared/builder-auth.js"></script>

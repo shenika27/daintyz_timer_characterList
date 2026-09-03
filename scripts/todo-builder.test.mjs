@@ -22,6 +22,8 @@ test("todo-builder가 판매 캐릭터·최초 발급·발급 원장 화면을 �
     "orderIssuedTo",
     "resetOrderFiltersButton",
     "orderTableBody",
+    "revealDialog",
+    "revealPasswordInput",
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
@@ -59,7 +61,7 @@ test("캐릭터 편집기가 기본정보·행동 구성·미리보기 단계를
 test("실제 PC 앱 액션과 패치 버전 게시 UI를 사용한다", () => {
   const html = read("docs/todo-builder/index.html");
   const source = read("docs/todo-builder/todo-builder.js");
-  for (const action of ["default", "overdue", "delete", "idle", "done", "add", "work", "pause", "timer_done", "open", "closed"]) {
+  for (const action of ["default", "overdue", "delete", "idle", "done", "add", "work", "pause", "timer_done", "open", "closed", "typing"]) {
     assert.match(source, new RegExp(`id: "${action}"`));
   }
   assert.match(source, /async function loadPublicationPlan\(\)/);
@@ -85,6 +87,9 @@ test("발급 횟수 이력과 재발급·폐기·환불 대화상자를 제공�
   assert.match(source, /data-history-action="reissue"/);
   assert.match(source, /data-history-action="revoke"/);
   assert.match(source, /data-history-action="refund"/);
+  assert.match(source, /data-reveal-code/);
+  assert.match(source, /data-copy-code/);
+  assert.match(source, /\/v1\/todo\/issuances\/\$\{encodeURIComponent\(issuanceId\)\}\/reveal/);
 });
 
 test("todo-builder가 2단계 CharacterTodo API 계약을 모두 사용한다", () => {

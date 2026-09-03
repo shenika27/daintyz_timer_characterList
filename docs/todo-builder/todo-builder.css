@@ -1110,6 +1110,90 @@
   white-space: nowrap;
 }
 
+.todo-current-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: max-content;
+}
+
+.todo-current-code code {
+  padding: 6px 9px;
+  border: 1px solid #cfc3ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #392967;
+  font: 700 12px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .02em;
+}
+
+.todo-code-eye,
+.todo-code-action {
+  border: 1px solid #d8cfee;
+  background: #fff;
+  color: #65528f;
+  cursor: pointer;
+}
+
+.todo-code-eye {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 9px;
+  place-items: center;
+}
+
+.todo-code-eye svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.todo-code-action {
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.todo-code-eye:hover,
+.todo-code-action:hover {
+  border-color: #9d87ce;
+  background: #f7f3ff;
+  color: #4d357f;
+}
+
+.todo-reveal-dialog { width: min(440px, calc(100% - 28px)); }
+
+.todo-reveal-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.todo-reveal-dialog input:focus {
+  border-color: var(--accent);
+  outline: 3px solid rgba(119, 91, 180, .13);
+}
+
+.todo-form-error {
+  margin: 10px 0 0;
+  color: #b43d4c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .todo-history-link {
   padding: 4px 8px;
   border: 1px solid #cdd5f7;
