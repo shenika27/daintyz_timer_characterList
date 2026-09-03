@@ -95,6 +95,8 @@
     revealedCodes: new Map(),
     revealIssuanceId: "",
     currentOrder: null,
+    mailOrder: null,
+    mailCodes: [],
   };
 
   const byId = (id) => document.getElementById(id);
@@ -669,10 +671,14 @@
 
   function emailStatusBadge(entry) {
     const status = String(entry.email_status || "").toUpperCase();
-    if (status === "SENT") return '<span class="todo-status" data-tone="active">메일발송</span>';
-    if (status === "SENDING") return '<span class="todo-status" data-tone="info">발송중</span>';
-    if (status === "FAILED") return '<span class="todo-status" data-tone="danger">발송실패</span>';
-    return '<span class="todo-status" data-tone="neutral">미발송</span>';
+    const encodedOrderId = encodeURIComponent(String(entry.order_id || ""));
+    const [label, tone] = status === "SENT" ? ["메일발송", "active"]
+      : status === "SENDING" ? ["발송중", "info"]
+        : status === "FAILED" ? ["발송실패", "danger"]
+          : ["미발송", "neutral"];
+    const title = status === "SENDING" ? "발송 진행 중" : "클릭하면 메일 발송 팝업 열림";
+    return `<button type="button" class="todo-status todo-status-button" data-tone="${tone}" `
+      + `data-mail-order="${escapeHtml(encodedOrderId)}" title="${title}">${label}</button>`;
   }
 
   function unitCodeStatus(unit) {
@@ -878,36 +884,52 @@
   }
 
   function renderMailCodes() {
-    const codes = Array.isArray(state.issuedCodes) ? state.issuedCodes : [];
+    const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
     const list = byId("mailCodeList");
     if (!codes.length) {
-      list.innerHTML = '<p class="todo-empty">표시할 발급 코드가 없습니다. 코드를 먼저 발급해 주세요.</p>';
+      list.innerHTML = '<p class="todo-empty">표시할 발급 코드가 없습니다.</p>';
       return;
     }
     list.innerHTML = codes.map((item, index) => `
       <div class="todo-code-row">
         <div class="todo-code-value">
           ${escapeHtml(item.code)}
-          <span class="todo-code-meta">${escapeHtml(item.entitlementType === "FEATURE" ? CUSTOMIZATION_PRODUCT_LABEL : item.characterId)} · 발급 ${numberValue(item.sequenceNo)}회</span>
+          <span class="todo-code-meta">${escapeHtml(item.product || "")} · 발급 ${numberValue(item.sequenceNo)}회</span>
         </div>
         <button class="todo-button todo-button-ghost todo-button-small" type="button" data-mail-copy-code="${index}">복사</button>
       </div>
     `).join("");
   }
 
-  function openMailDialog() {
-    const order = state.currentOrder;
-    const codes = Array.isArray(state.issuedCodes) ? state.issuedCodes : [];
-    if (!order || !codes.length) {
-      showNotice("먼저 코드를 발급해 주세요.", "error", true);
+  async function openMailDialog(orderId) {
+    if (!orderId) {
+      showNotice("주문 정보가 없습니다. 코드를 먼저 발급해 주세요.", "error", true);
       return;
     }
     byId("mailError").hidden = true;
     byId("mailError").textContent = "";
-    byId("mailSummary").textContent =
-      `${order.buyerEmail || "받는 사람"} · ${order.externalOrderId || order.orderId} · 코드 ${codes.length}개`;
-    renderMailCodes();
-    mailDialog.showModal();
+    byId("mailSummary").textContent = "코드를 불러오는 중…";
+    byId("mailCodeList").innerHTML = '<p class="todo-empty">불러오는 중…</p>';
+    byId("confirmMailButton").disabled = true;
+    if (!mailDialog.open) mailDialog.showModal();
+    try {
+      const data = await api(`/v1/todo/orders/${encodeURIComponent(orderId)}/codes`);
+      const order = data.order || {};
+      state.mailOrder = {
+        orderId,
+        externalOrderId: order.external_order_id || "",
+        buyerEmailMask: order.buyer_email_mask || "",
+      };
+      state.mailCodes = Array.isArray(data.codes) ? data.codes : [];
+      byId("mailSummary").textContent =
+        `${state.mailOrder.buyerEmailMask || "받는 사람"} · ${state.mailOrder.externalOrderId || orderId} · 코드 ${state.mailCodes.length}개`;
+      renderMailCodes();
+      byId("confirmMailButton").disabled = state.mailCodes.length === 0;
+    } catch (error) {
+      byId("mailError").textContent = error.message;
+      byId("mailError").hidden = false;
+      byId("mailCodeList").innerHTML = '<p class="todo-empty">코드를 불러오지 못했습니다.</p>';
+    }
   }
 
   function closeMailDialog() {
@@ -924,7 +946,7 @@
   }
 
   async function sendMail() {
-    const order = state.currentOrder;
+    const order = state.mailOrder;
     if (!order || !order.orderId) {
       showNotice("발송할 주문 정보가 없습니다. 코드를 먼저 발급해 주세요.", "error", true);
       return;
@@ -1491,14 +1513,14 @@
     if (item?.code) copyText(item.code, "코드를 복사했습니다.");
   });
 
-  byId("openMailButton").addEventListener("click", openMailDialog);
+  byId("openMailButton").addEventListener("click", () => openMailDialog(state.currentOrder?.orderId));
   byId("closeMailButton").addEventListener("click", closeMailDialog);
   byId("cancelMailButton").addEventListener("click", closeMailDialog);
   byId("confirmMailButton").addEventListener("click", sendMail);
   byId("mailCodeList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-mail-copy-code]");
     if (!button) return;
-    const item = state.issuedCodes[numberValue(button.dataset.mailCopyCode)];
+    const item = state.mailCodes[numberValue(button.dataset.mailCopyCode)];
     if (item?.code) copyText(item.code, "코드를 복사했습니다.");
   });
 
@@ -1544,6 +1566,11 @@
   });
 
   byId("orderTableBody").addEventListener("click", (event) => {
+    const mailButton = event.target.closest("[data-mail-order]");
+    if (mailButton) {
+      openMailDialog(decodeURIComponent(mailButton.dataset.mailOrder || ""));
+      return;
+    }
     const revealButton = event.target.closest("[data-reveal-code]");
     if (revealButton) {
       const issuanceId = decodeURIComponent(revealButton.dataset.revealCode || "");
