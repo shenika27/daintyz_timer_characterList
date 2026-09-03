@@ -452,13 +452,13 @@
         <details class="opt">
           <summary>숫자 폰트 (선택)</summary>
           <div class="body grid">
-            <p class="sub" style="margin:0">.ttf를 올리면 숫자를 그 폰트로 렌더링합니다(이때 크기는 영역에 맞춰지고 sizeSp는 무시).<br>색만 바꾸려면 폰트는 비우고 색만 지정하세요.</p>
+            <p class="sub" style="margin:0">숫자 크기는 항상 시간 영역에 맞춰집니다(sizeSp는 적용되지 않음). .ttf를 올리면 그 폰트로, 없으면 내장 monospace로 렌더링합니다.<br>색만 바꾸려면 폰트는 비우고 색만 지정하세요.</p>
             <div id="asset_font"></div>
             <div class="grid two">
               <label class="field"><span>숫자 색 (#RRGGBB, 선택)</span>
                 <input type="text" id="fontColor" placeholder="#FFFFFF" autocomplete="off"></label>
-              <label class="field"><span>크기 sizeSp (선택, .ttf 없을 때만 적용)</span>
-                <input type="number" id="fontSize" placeholder="30" min="1" step="1"></label>
+              <label class="field"><span>크기 sizeSp (미사용 — 영역 자동 맞춤)</span>
+                <input type="number" id="fontSize" placeholder="자동" min="1" step="1" disabled></label>
             </div>
             <label class="field"><span>내장 패밀리 (선택, .ttf 없을 때만)</span>
               <select id="fontFamily">
