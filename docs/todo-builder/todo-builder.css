@@ -900,6 +900,13 @@
 .todo-status[data-tone="warning"] { background: #fff5dc; color: #a26a00; }
 .todo-status[data-tone="danger"] { background: #ffedeb; color: #b83b34; }
 .todo-status[data-tone="info"] { background: #eef1ff; color: #506dd8; }
+.todo-status[data-tone="neutral"] { background: #f0f1f4; color: #6b7280; }
+
+.todo-status-stack {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
 
 .todo-order-items {
   display: grid;
@@ -1244,6 +1251,24 @@
 
 .todo-reason-dialog,
 .todo-code-dialog { width: min(480px, calc(100% - 28px)); }
+
+.todo-mail-dialog { width: min(560px, calc(100% - 28px)); }
+.todo-mail-section + .todo-mail-section { margin-top: 18px; }
+.todo-mail-section-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--shell-text, #1f2430);
+}
+.todo-mail-template {
+  padding: 14px 16px;
+  border: 1px dashed #d4d8e0;
+  border-radius: 10px;
+  background: #f8f9fb;
+  color: var(--shell-sub);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
 
 .todo-dialog-header {
   display: flex;

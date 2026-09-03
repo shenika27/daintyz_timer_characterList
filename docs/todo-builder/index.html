@@ -235,6 +235,7 @@
 
           <div class="todo-form-actions">
             <button class="todo-button todo-button-primary" type="submit" id="issueOrderButton">코드 발급</button>
+            <button class="todo-button todo-button-secondary" type="button" id="openMailButton" disabled>메일 발송</button>
           </div>
           <p class="todo-help">발급된 전체 코드는 결과 화면에서 확인·복사할 수 있습니다. 이메일 자동 발송은 아직 연결하지 않습니다.</p>
         </form>
@@ -432,6 +433,32 @@
         </div>
       </div>
     </form>
+  </dialog>
+
+  <dialog class="todo-dialog todo-mail-dialog" id="mailDialog" aria-labelledby="mailDialogTitle">
+    <div class="todo-dialog-header">
+      <div>
+        <p class="todo-kicker">코드 메일 발송</p>
+        <h2 id="mailDialogTitle">메일 발송</h2>
+        <p class="todo-dialog-summary" id="mailSummary">받는 사람과 발급된 코드를 확인한 뒤 발송하세요.</p>
+      </div>
+      <button class="todo-icon-button" type="button" id="closeMailButton" aria-label="메일 발송 닫기">×</button>
+    </div>
+    <div class="todo-dialog-body">
+      <section class="todo-mail-section">
+        <h3 class="todo-mail-section-title">메일 템플릿</h3>
+        <div class="todo-mail-template" id="mailTemplatePreview">템플릿은 다음 단계에서 편집합니다.</div>
+      </section>
+      <section class="todo-mail-section">
+        <h3 class="todo-mail-section-title">발급된 코드</h3>
+        <div class="todo-code-list" id="mailCodeList"></div>
+      </section>
+      <p class="todo-form-error" id="mailError" role="alert" hidden></p>
+      <div class="todo-form-actions todo-dialog-actions">
+        <button class="todo-button todo-button-ghost" type="button" id="cancelMailButton">취소</button>
+        <button class="todo-button todo-button-primary" type="button" id="confirmMailButton">메일 발송</button>
+      </div>
+    </div>
   </dialog>
 
   <script src="../shared/builder-auth.js"></script>
