@@ -55,6 +55,7 @@ for (const item of pending) {
     catalog.skins = catalog.skins.filter((entry) => entry.skinId !== item.skinId);
     fs.rmSync(path.join(ROOT, "character", "zip", `${item.skinId}.zip`), { force: true });
     fs.rmSync(path.join(ROOT, "character", "preview", item.skinId), { recursive: true, force: true });
+    fs.rmSync(path.join(ROOT, "character", "versioned", item.skinId), { recursive: true, force: true });
     fs.appendFileSync(R2_DELETE, `${item.skinId}.zip\n`);
     for (let deployedVersion = 1; deployedVersion <= version; deployedVersion++) {
       fs.appendFileSync(R2_DELETE, `versions/${item.skinId}/v${deployedVersion}.zip\n`);

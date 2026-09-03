@@ -15,7 +15,9 @@ function fixture() {
   fs.mkdirSync(path.join(root, "_inbox"), { recursive: true });
   fs.mkdirSync(path.join(root, "character", "preview", "paid"), { recursive: true });
   fs.mkdirSync(path.join(root, "character", "zip"), { recursive: true });
+  fs.mkdirSync(path.join(root, "character", "versioned", "paid", "v2", "preview"), { recursive: true });
   fs.writeFileSync(path.join(root, "character", "preview", "paid", "thumb.png"), "preview");
+  fs.writeFileSync(path.join(root, "character", "versioned", "paid", "v2", "preview", "thumb.png"), "preview-v2");
   fs.writeFileSync(path.join(root, "catalog.json"), JSON.stringify({
     skins: [{
       skinId: "paid", name: "유료", price: 1000, productId: "skin_paid", version: 2,
@@ -38,6 +40,7 @@ test("유료 삭제는 Play 판정 전 catalog·preview·마커를 보존한다"
     run(APPLY, root);
     assert.equal(JSON.parse(fs.readFileSync(path.join(root, "catalog.json"))).skins.length, 1);
     assert.equal(fs.existsSync(path.join(root, "character", "preview", "paid", "thumb.png")), true);
+    assert.equal(fs.existsSync(path.join(root, "character", "versioned", "paid", "v2", "preview", "thumb.png")), true);
     assert.equal(fs.existsSync(path.join(root, "_inbox", "paid.delete.json")), true);
     assert.equal(fs.existsSync(path.join(root, "_r2_delete.txt")), false);
     assert.equal(JSON.parse(fs.readFileSync(path.join(root, "_pending_paid_deletes.json"))).length, 1);
@@ -58,6 +61,7 @@ test("판매 이력 상품은 hidden+archived로 남아 기존 구매자의 재�
     assert.equal(entry.hidden, true);
     assert.equal(entry.archived, true);
     assert.equal(fs.existsSync(path.join(root, "character", "preview", "paid", "thumb.png")), true);
+    assert.equal(fs.existsSync(path.join(root, "character", "versioned", "paid", "v2", "preview", "thumb.png")), true);
     assert.equal(fs.existsSync(path.join(root, "_r2_delete.txt")), false);
     assert.equal(fs.existsSync(path.join(root, "_inbox", "paid.delete.json")), false);
   } finally {
@@ -75,6 +79,7 @@ test("미판매 상품만 catalog·preview·R2에서 완전 삭제한다", () =>
     run(FINALIZE, root);
     assert.equal(JSON.parse(fs.readFileSync(path.join(root, "catalog.json"))).skins.length, 0);
     assert.equal(fs.existsSync(path.join(root, "character", "preview", "paid")), false);
+    assert.equal(fs.existsSync(path.join(root, "character", "versioned", "paid")), false);
     assert.equal(
       fs.readFileSync(path.join(root, "_r2_delete.txt"), "utf8").trim(),
       "paid.zip\nversions/paid/v1.zip\nversions/paid/v2.zip",

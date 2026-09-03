@@ -47,6 +47,13 @@ test("타이머 빌더 출시 목록이 업로드 진행률과 실패 재시도�
   assert.match(html, /\/v1\/inbox\/deployment\/retry/);
 });
 
+test("타이머 빌더는 최신 catalog와 삭제 완료를 Worker에서 자동 확인한다", () => {
+  const html = read("docs/timer-builder/index.html");
+  assert.match(html, /\/v1\/catalog/);
+  assert.match(html, /monitorDeletion\(id, ok\.commit, paid\)/);
+  assert.match(html, /CATALOG_FALLBACK_URL/);
+});
+
 test("공용 인증은 허용된 내부 빌더 이름만 이동 경로로 사용한다", () => {
   const source = read("docs/shared/builder-auth.js");
   assert.match(source, /"timer-builder": "\.\/timer-builder\/"/);

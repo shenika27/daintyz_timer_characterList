@@ -459,7 +459,7 @@ git/소스트리를 몰라도 됩니다. 로그인 후 **`⬆ 자동 업로드` 
 자동 업로드를 사용할 수 없는 경우에는 **`⬇ 번들 zip 만들기`**로 `{skinId}.zip`을 받은 뒤, 이 레포의 `_inbox` 폴더에서 **`Add file ▸ Upload files`**로 직접 올리고 Commit 합니다.
 
 > 업로드하면 GitHub Action(`.github/workflows/skin-deploy.yml`)이 자동으로:
-> 번들을 풀어 `character/preview/{id}/`와 무료 `character/zip/{id}.zip` 배치 + `catalog.json`에 항목 upsert(기존이면 version +1)
+> 번들을 풀어 기존 호환 경로와 `character/versioned/{id}/v{version}/` 캐시 분리 경로를 함께 배치 + `catalog.json`에 항목 upsert(기존이면 version +1)
 > + (유료면) 공개 zip을 남기지 않고 비공개 R2의 현재 키와 버전 보관 키에 업로드
 > + **Play 인앱상품(SKU) 자동 등록** + 올린 inbox zip 삭제 후 커밋.
 > 즉 아래 "수동 절차"를 사람이 안 해도 됩니다. catalog 항목·파일명·폴더 규칙이 빌더에서 자동으로 맞춰집니다.
@@ -656,8 +656,10 @@ character/preview/newchar/motion_running.gif
 | `giftCodes` | array | ❌ | 개별 테마 기프트코드 목록. 각 항목은 `{hash, maxUses, expiresAt?}`이며 스킨빌더 마커로 병합 권장 |
 | `createdAt` | string | ❌ | 출시일 `"yyyy-MM-dd"`. 상점 NEW 배지 판정(출시일+7일 이내). 생략 시 NEW 안 뜸 |
 | `version` | number | ❌ | 테마 배포 버전. 앱이 설치 버전과 비교해 업데이트 버튼을 표시. 스킨빌더 자동배치 시 재업로드면 +1 됨 |
+| `assetVersion` | number | ❌ | 버전별 공개 에셋 경로가 생성된 배포 버전. 자동 파이프라인이 기록하며, 없는 기존 항목은 종전 고정 경로를 사용 |
 
 > **공개 자동 유추 경로** (`{baseUrl}/` 기준): 무료 zip은 `character/zip/{skinId}.zip`, 미리보기는 `character/preview/{skinId}/thumb.png`.
+> `assetVersion`이 있으면 새 앱은 `character/versioned/{skinId}/v{assetVersion}/skin.zip`과 그 아래 `preview/`를 사용합니다. 기존 고정 경로는 구버전 앱 호환용으로 함께 유지합니다.
 > 유료 zip 다운로드 경로는 공개 catalog URL이 아니라 앱의 결제 검증 Worker가 결정합니다.
 > 행동별 미리보기는 같은 폴더의 `motion_{state}.{gif,png}`를 앱이 자동 탐침합니다.
 > 특수한 경우만 catalog 항목에 `zipUrl`/`thumbnailUrl`로 개별 덮어쓸 수 있습니다(이 둘만 오버라이드 지원).

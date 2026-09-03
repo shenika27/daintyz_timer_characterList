@@ -208,6 +208,20 @@ for (const zip of zips) {
     log(`  → catalog 신규: ${entry.skinId} (version ${entry.version})`);
   }
 
+  // 새 앱은 버전별 고정 경로를 사용해 jsDelivr @main 및 기기 이미지 캐시의 이전 내용을 피한다.
+  // 기존 preview/zip 경로도 계속 배치하므로 이미 출시된 앱과 빌더 편집 기능은 그대로 동작한다.
+  const versionedRoot = path.join(ROOT, "character", "versioned", skinId, `v${entry.version}`);
+  if (fs.existsSync(previewSrc)) {
+    fs.cpSync(previewSrc, path.join(versionedRoot, "preview"), { recursive: true });
+    log(`  → 버전 미리보기: character/versioned/${skinId}/v${entry.version}/preview`);
+  }
+  if (!paid) {
+    fs.mkdirSync(versionedRoot, { recursive: true });
+    fs.copyFileSync(zipSrc, path.join(versionedRoot, "skin.zip"));
+    log(`  → 버전 무료 zip: character/versioned/${skinId}/v${entry.version}/skin.zip`);
+  }
+  entry.assetVersion = entry.version;
+
   // 5) 유료면 Play 인앱상품 동기화 큐에 올린다(SKU 등록/가격·이름 수정).
   //    idx<0 = catalog에 처음 등장하는 skinId → isNew. sync가 productId 재사용을 막는 데 쓴다.
   if (paid) {
@@ -264,6 +278,7 @@ for (const marker of markers) {
   }
   fs.rmSync(path.join(ROOT, "character", "zip", `${skinId}.zip`), { force: true });
   fs.rmSync(path.join(ROOT, "character", "preview", skinId), { recursive: true, force: true });
+  fs.rmSync(path.join(ROOT, "character", "versioned", skinId), { recursive: true, force: true });
   const before = catalog.skins.length;
   catalog.skins = catalog.skins.filter(s => s.skinId !== skinId);
   log(`  → 삭제: ${skinId} (character/zip·preview 제거, catalog ${before}→${catalog.skins.length})`);

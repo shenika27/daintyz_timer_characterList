@@ -1803,6 +1803,12 @@ function markDeletePending(skinId) {
   renderReleased();
 }
 
+function clearDeletePending(skinId) {
+  pendingDeleteIds.delete(skinId);
+  savePendingDelete();
+  renderReleased();
+}
+
 function reconcilePendingDeletes(catalogSkins) {
   if (!pendingDeleteIds.size) return;
   const activeIds = new Set(catalogSkins.filter(s => !s.archived).map(s => s.skinId));
@@ -1844,7 +1850,8 @@ async function makeDeleteMarker(entry = null) {
     if (ok) {
       markDeletePending(id);
       $("status").innerHTML =
-        `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → 1~2분 뒤 ${paid ? "Play 이력 판정 후 삭제/보관" : "완전 삭제"}가 실행됩니다. (완료되면 ↻로 목록 갱신)`;
+        `🗑 <b>${escapeHtml(id)}</b> 삭제 요청 업로드 완료 → ${paid ? "Play 이력 판정 후 삭제/보관" : "완전 삭제"} 진행 상황을 확인하고 있습니다.`;
+      monitorDeletion(id, ok.commit, paid);
     }
     return;
   }
@@ -1855,7 +1862,7 @@ async function makeDeleteMarker(entry = null) {
 }
 
 /* ---------- 출시 스킨 조회 패널 ---------- */
-const CATALOG_URL = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main/catalog.json";
+const CATALOG_FALLBACK_URL = "https://raw.githubusercontent.com/shenika27/daintyz_timer_characterList/main/catalog.json";
 let releasedSkins = [];
 const pendingDeployments = new Map();
 const DEPLOYMENT_POLL_MS = 5000;
@@ -1979,6 +1986,39 @@ async function monitorDeployment(skinId) {
     await waitForNextDeploymentPoll();
   }
   failDeployment(skinId, "상태 확인 시간이 초과되었습니다.", "status");
+}
+
+async function monitorDeletion(skinId, commit, paid) {
+  if (!commit) {
+    clearDeletePending(skinId);
+    $("status").textContent = `삭제 요청은 업로드됐지만 커밋 정보를 받지 못해 자동 확인을 시작할 수 없습니다.`;
+    return;
+  }
+  const deadline = Date.now() + DEPLOYMENT_TIMEOUT_MS;
+  let consecutiveErrors = 0;
+  while (Date.now() < deadline && pendingDeleteIds.has(skinId)) {
+    try {
+      const status = await readDeploymentStatus(commit);
+      consecutiveErrors = 0;
+      if (status.state === "success") {
+        await loadReleased();
+        $("status").innerHTML = `✅ <b>${escapeHtml(skinId)}</b> ${paid ? "삭제/보관" : "삭제"}가 완료되었습니다.`;
+        return;
+      }
+      if (status.state === "failed") {
+        clearDeletePending(skinId);
+        $("status").innerHTML = `⚠️ <b>${escapeHtml(skinId)}</b> 삭제 실패: ${escapeHtml(status.failedStep || "GitHub Actions")}`;
+        return;
+      }
+    } catch (error) {
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= 3) {
+        $("status").innerHTML = `⚠️ <b>${escapeHtml(skinId)}</b> 삭제 상태 자동 확인 실패: ${escapeHtml(error.message)}`;
+        return;
+      }
+    }
+    await waitForNextDeploymentPoll();
+  }
 }
 
 async function retryDeployment(skinId) {
@@ -2174,9 +2214,20 @@ async function loadReleased() {
     $("relCount").textContent = "…";
   }
   try {
-    const res = await fetch(CATALOG_URL + "?t=" + Date.now(), { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
+    let data;
+    try {
+      const latest = await fetch(`${INBOX_API_URL}/v1/catalog`, {
+        method: "GET", credentials: "include", cache: "no-store",
+      });
+      const body = await latest.json().catch(() => null);
+      if (latest.status === 401) showLogin("로그인 시간이 만료되었습니다. 다시 로그인해 주세요.");
+      if (!latest.ok || !body?.ok || !body.catalog) throw new Error(body?.error || `최신 조회 실패(${latest.status})`);
+      data = body.catalog;
+    } catch {
+      const fallback = await fetch(CATALOG_FALLBACK_URL, { cache: "no-store" });
+      if (!fallback.ok) throw new Error("HTTP " + fallback.status);
+      data = await fallback.json();
+    }
     releasedSkins = Array.isArray(data.skins) ? data.skins.slice() : [];
     releasedSkins.sort((a, b) => (a.skinId || "").localeCompare(b.skinId || ""));
     // 카탈로그에서 사라졌거나 archived로 바뀐 항목은 삭제 완료로 간주해 회색 잠금을 해제한다.
