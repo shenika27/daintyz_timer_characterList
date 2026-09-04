@@ -1262,7 +1262,7 @@
 .todo-code-dialog { width: min(480px, calc(100% - 28px)); }
 
 .todo-mail-dialog {
-  width: min(1120px, calc(100% - 28px));
+  width: min(1040px, calc(100% - 28px));
   max-height: min(920px, calc(100vh - 32px));
 }
 /* flex 컬럼은 반드시 [open]에 걸어야 한다. 브라우저 기본 dialog[open]{display:block}
@@ -1434,26 +1434,27 @@
   overscroll-behavior: contain; /* 에디터 스크롤이 팝업/페이지로 전파되지 않게 */
 }
 
-/* 발급 코드: 한 코드가 한 줄(전체 폭)로 길게 나오도록 단일 열.
+/* 발급 코드: 한 줄에 여러 개(3~4개) 들어가도록 여러 열로 채운다.
+   코드값이 한 줄에 다 들어가도록 열 최소폭을 넉넉히 잡는다.
    자체 스크롤을 두지 않고 다이얼로그 본문의 단일 스크롤에 포함시킨다. */
 .todo-code-list-compact {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
   padding: 2px;
 }
 .todo-code-list-compact .todo-code-row {
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 8px;
+  padding: 8px 10px;
 }
-/* 코드값과 메타(상품·발급회차)를 한 줄에 나란히 */
+/* 코드는 셀 안에서 줄바꿈 없이 한 줄로 (메타는 아래에서 필요시 줄바꿈) */
 .todo-code-list-compact .todo-code-value {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 10px;
   font-size: 13px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.todo-code-list-compact .todo-code-meta { display: inline; margin-top: 0; }
+.todo-code-list-compact .todo-code-meta { white-space: normal; }
 
 @media (max-width: 680px) {
   .todo-mail-template-grid { grid-template-columns: minmax(0, 1fr); }
