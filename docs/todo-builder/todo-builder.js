@@ -744,7 +744,7 @@
     const items = Array.isArray(order.items) ? order.items : [];
     return `
       <tr class="todo-order-detail-row">
-        <td colspan="7">
+        <td colspan="8">
           <section class="todo-order-detail" aria-label="${escapeHtml(order.external_order_id)} 상품별 코드 현황">
             <div class="todo-order-detail-heading">
               <div>
@@ -805,6 +805,7 @@
           <td>${codeMetrics(entry)}</td>
           <td><span class="todo-status-stack">${statusBadge(codeStatus(entry))}${emailStatusBadge(entry)}</span></td>
           <td>${escapeHtml(formatDateTime(entry.created_at))}</td>
+          <td>${entry.email_sent_at ? escapeHtml(formatDateTime(entry.email_sent_at)) : '<span class="todo-table-sub">-</span>'}</td>
           <td><button class="todo-button todo-button-ghost todo-button-small" type="button" data-order-toggle="${escapeHtml(encodedOrderId)}" aria-expanded="${expanded}">${expanded ? "접기" : "상세"}</button></td>
         </tr>
         ${expanded ? renderOrderItems(entry) : ""}
@@ -846,6 +847,22 @@
       item_count: order.items.length,
       character_count: new Set(order.items.map((item) => item.character_id)).size,
     }));
+  }
+
+  // 발급일 기본 범위: 시작일=1년 전, 종료일=오늘 (브라우저 로컬 날짜 기준)
+  function setDefaultOrderDateRange() {
+    const pad = (n) => String(n).padStart(2, "0");
+    const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const today = new Date();
+    const from = new Date(today);
+    from.setFullYear(from.getFullYear() - 1);
+    const fromEl = byId("orderIssuedFrom");
+    const toEl = byId("orderIssuedTo");
+    const todayStr = ymd(today);
+    // min/max로 연도 입력을 4자리(현재연도 이하)로 제한한다.
+    for (const el of [fromEl, toEl]) { el.min = "2000-01-01"; el.max = todayStr; }
+    fromEl.value = ymd(from);
+    toEl.value = todayStr;
   }
 
   async function loadOrders() {
@@ -1379,6 +1396,7 @@
         return;
       }
       byId("authUsername").textContent = `${data.username}님`;
+      setDefaultOrderDateRange();
       await Promise.all([loadCharacters(), loadOrders(), loadPublications()]);
     } catch (error) {
       showNotice(error.message || "운영 데이터를 불러오지 못했습니다.", "error", true);
@@ -1806,8 +1824,7 @@
 
   byId("resetOrderFiltersButton").addEventListener("click", async () => {
     byId("orderSearchInput").value = "";
-    byId("orderIssuedFrom").value = "";
-    byId("orderIssuedTo").value = "";
+    setDefaultOrderDateRange();
     try { await loadOrders(); showNotice("주문 검색 조건을 초기화했습니다.", "success"); }
     catch (error) { showNotice(error.message, "error", true); }
   });
