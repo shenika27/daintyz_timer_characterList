@@ -1261,7 +1261,18 @@
 .todo-reason-dialog,
 .todo-code-dialog { width: min(480px, calc(100% - 28px)); }
 
-.todo-mail-dialog { width: min(880px, calc(100% - 28px)); }
+.todo-mail-dialog {
+  /* 넓게 + 세로로 더 활용. 본문이 다이얼로그 높이에 맞춰 스크롤되도록 flex 컬럼. */
+  width: min(1040px, calc(100% - 28px));
+  max-height: min(920px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+}
+.todo-mail-dialog .todo-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
 .todo-mail-section + .todo-mail-section { margin-top: 20px; }
 .todo-mail-section-title {
   margin: 0;
@@ -1374,20 +1385,16 @@
   font-weight: 800;
   word-break: break-word;
 }
+/* 미리보기는 본문 에디터와 동일하게 보이도록 Quill ql-editor 스타일을 그대로 쓴다.
+   (별도 타이포 CSS 없이 토큰 치환 결과만 렌더 — 컨테이너 크기/스크롤만 지정) */
 .todo-mail-preview-body {
   margin: 0;
-  max-height: 340px;
-  padding: 14px;
-  overflow: auto;
-  color: #37404f;
-  font: 12.5px/1.65 "Segoe UI", "Malgun Gothic", sans-serif;
   word-break: break-word;
 }
-.todo-mail-preview-body p { margin: 0 0 8px; }
-.todo-mail-preview-body ul { margin: 8px 0; padding-left: 20px; }
-.todo-mail-preview-body li { margin: 2px 0; }
-.todo-mail-preview-body code { font: 700 12px/1.4 Consolas, monospace; color: #293d83; }
-.todo-mail-preview-body img { max-width: 100%; height: auto; }
+.todo-mail-preview-body.ql-editor {
+  font: 12.5px/1.6 "Segoe UI", "Malgun Gothic", sans-serif;
+  color: #37404f;
+}
 
 /* 읽기전용 주문번호 필드 */
 .todo-mail-order input[readonly] {
@@ -1417,17 +1424,17 @@
   font: 12.5px/1.6 "Segoe UI", "Malgun Gothic", sans-serif;
 }
 .todo-mail-body-editor .ql-editor {
-  min-height: 240px;
-  max-height: 360px;
+  min-height: 260px;
+  max-height: 420px;
+  overscroll-behavior: contain; /* 에디터 스크롤이 팝업/페이지로 전파되지 않게 */
 }
 
-/* 발급 코드: 여러 열로 채워 세로 길이를 줄이고 넓은 여백을 없앤다 */
+/* 발급 코드: 여러 열로 채워 세로 길이를 줄이고 넓은 여백을 없앤다.
+   자체 스크롤을 두지 않고 다이얼로그 본문의 단일 스크롤에 포함시킨다. */
 .todo-code-list-compact {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 8px;
-  max-height: 220px;
   padding: 2px;
-  overflow: auto;
 }
 .todo-code-list-compact .todo-code-row {
   gap: 8px;
@@ -1470,6 +1477,7 @@
   max-height: calc(100vh - 180px);
   padding: 20px 22px 24px;
   overflow: auto;
+  overscroll-behavior: contain; /* 팝업 내부 스크롤이 바깥 페이지로 전파되지 않게 */
 }
 
 .todo-history-list { display: grid; gap: 12px; }

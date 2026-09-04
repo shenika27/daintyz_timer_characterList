@@ -121,6 +121,7 @@
   const revealDialog = byId("revealDialog");
   const mailDialog = byId("mailDialog");
   let mailQuill = null;
+  let mailEditSnapshot = null;
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -941,7 +942,6 @@
       modules: { toolbar: "#mailBodyToolbar" },
       placeholder: "메일 본문을 입력하세요…",
     });
-    mailQuill.on("text-change", renderMailPreview);
   }
 
   function getMailBodyHtml() {
@@ -983,8 +983,40 @@
   }
 
   function syncMailConfirmState() {
+    // '메일 발송'은 수신 이메일이 유효하고 발급 코드가 있을 때만 활성화한다.
     const ready = state.mailCodes.length > 0 && isEmailish(recipientValue());
     byId("confirmMailButton").disabled = !ready;
+  }
+
+  function showMailStep(step) {
+    byId("mailPreviewStep").hidden = step !== "preview";
+    byId("mailComposeStep").hidden = step !== "edit";
+    const body = mailDialog.querySelector(".todo-dialog-body");
+    if (body) body.scrollTop = 0;
+  }
+
+  // 편집 진입 전 상태를 스냅샷해 '취소' 시 되돌린다.
+  function openMailEdit() {
+    mailEditSnapshot = {
+      subject: byId("mailSubjectInput").value,
+      delta: mailQuill ? mailQuill.getContents() : null,
+    };
+    byId("mailError").hidden = true;
+    byId("mailError").textContent = "";
+    showMailStep("edit");
+  }
+
+  function saveMailEdit() {
+    renderMailPreview();
+    showMailStep("preview");
+  }
+
+  function cancelMailEdit() {
+    if (mailEditSnapshot) {
+      byId("mailSubjectInput").value = mailEditSnapshot.subject;
+      if (mailQuill && mailEditSnapshot.delta) mailQuill.setContents(mailEditSnapshot.delta);
+    }
+    showMailStep("preview");
   }
 
   function fillMailTemplate(text, asHtml) {
@@ -1030,15 +1062,17 @@
     }
     byId("mailError").hidden = true;
     byId("mailError").textContent = "";
+    byId("mailPreviewError").hidden = true;
+    byId("mailPreviewError").textContent = "";
     byId("mailSummary").textContent = "코드를 불러오는 중…";
     byId("mailCodeList").innerHTML = '<p class="todo-empty">불러오는 중…</p>';
     byId("mailRecipientInput").value = "";
     byId("mailTargetOrder").value = "-";
     byId("mailCodeCount").textContent = "";
     byId("confirmMailButton").disabled = true;
+    showMailStep("preview");
     initMailEditor();
     ensureMailTemplateLoaded();
-    renderMailPreview();
     if (!mailDialog.open) mailDialog.showModal();
     try {
       const data = await api(`/v1/todo/orders/${encodeURIComponent(orderId)}/codes`);
@@ -1085,7 +1119,7 @@
       return;
     }
     const button = byId("confirmMailButton");
-    const errorElement = byId("mailError");
+    const errorElement = byId("mailPreviewError");
     errorElement.hidden = true;
     setButtonBusy(button, true, "발송 중…");
     try {
@@ -1648,13 +1682,14 @@
 
   byId("openMailButton").addEventListener("click", () => openMailDialog(state.currentOrder?.orderId));
   byId("closeMailButton").addEventListener("click", closeMailDialog);
-  byId("cancelMailButton").addEventListener("click", closeMailDialog);
+  byId("mailEditButton").addEventListener("click", openMailEdit);
+  byId("mailEditCancelButton").addEventListener("click", cancelMailEdit);
+  byId("mailEditSaveButton").addEventListener("click", saveMailEdit);
   byId("confirmMailButton").addEventListener("click", sendMail);
   byId("mailRecipientInput").addEventListener("input", () => {
     renderMailPreview();
     syncMailConfirmState();
   });
-  byId("mailSubjectInput").addEventListener("input", renderMailPreview);
   byId("resetMailTemplateButton").addEventListener("click", resetMailTemplate);
   byId("mailCodeList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-mail-copy-code]");
