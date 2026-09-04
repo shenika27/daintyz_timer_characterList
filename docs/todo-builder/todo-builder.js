@@ -68,22 +68,13 @@
   const DEFAULT_MAIL_TEMPLATE = Object.freeze({
     subject: "[CharacterTodo] 주문하신 캐릭터 코드를 보내드립니다",
     body: [
-      "안녕하세요, CharacterTodo입니다.",
-      "",
-      "주문해 주셔서 감사합니다. 아래 코드를 앱에서 등록하면 캐릭터를 바로 사용하실 수 있습니다.",
-      "",
-      "· 상품: {{상품명}}",
-      "· 주문번호: {{주문번호}}",
-      "· 발급 코드 ({{코드수}}개)",
+      "<p>안녕하세요, CharacterTodo입니다.</p>",
+      "<p>주문해 주셔서 감사합니다. 아래 코드를 앱에서 등록하면 캐릭터를 바로 사용하실 수 있습니다.</p>",
+      "<p>· 상품: {{상품명}}<br>· 주문번호: {{주문번호}}<br>· 발급 코드 ({{코드수}}개)</p>",
       "{{코드목록}}",
-      "",
-      "[등록 방법]",
-      "1. CharacterTodo 앱을 실행합니다.",
-      "2. 설정 → 캐릭터 → 구매 코드 등록에 위 코드를 입력합니다.",
-      "",
-      "코드가 보이지 않거나 등록이 안 되면 이 메일에 회신해 주세요.",
-      "감사합니다.",
-    ].join("\n"),
+      "<p><strong>[등록 방법]</strong><br>1. CharacterTodo 앱을 실행합니다.<br>2. 설정 → 캐릭터 → 구매 코드 등록에 위 코드를 입력합니다.</p>",
+      "<p>코드가 보이지 않거나 등록이 안 되면 이 메일에 회신해 주세요.<br>감사합니다.</p>",
+    ].join(""),
   });
   const state = {
     characters: [],
@@ -129,6 +120,7 @@
   const publishDialog = byId("publishDialog");
   const revealDialog = byId("revealDialog");
   const mailDialog = byId("mailDialog");
+  let mailQuill = null;
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -927,10 +919,42 @@
     return products.length ? products.join(", ") : "구매 상품";
   }
 
-  function mailCodeLines() {
+  function mailCodeLinesText() {
     const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
     if (!codes.length) return "  (발급된 코드 없음)";
     return codes.map((c) => `  - ${c.code}${c.product ? `  (${c.product})` : ""}`).join("\n");
+  }
+
+  function mailCodeLinesHtml() {
+    const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
+    if (!codes.length) return "<p>(발급된 코드 없음)</p>";
+    const items = codes
+      .map((c) => `<li><code>${escapeHtml(c.code)}</code>${c.product ? ` — ${escapeHtml(c.product)}` : ""}</li>`)
+      .join("");
+    return `<ul>${items}</ul>`;
+  }
+
+  function initMailEditor() {
+    if (mailQuill || typeof Quill === "undefined") return;
+    mailQuill = new Quill("#mailBodyEditor", {
+      theme: "snow",
+      modules: { toolbar: "#mailBodyToolbar" },
+      placeholder: "메일 본문을 입력하세요…",
+    });
+    mailQuill.on("text-change", renderMailPreview);
+  }
+
+  function getMailBodyHtml() {
+    return mailQuill ? mailQuill.root.innerHTML : "";
+  }
+
+  function setMailBodyHtml(html) {
+    if (!mailQuill) return;
+    mailQuill.setContents(mailQuill.clipboard.convert({ html: String(html || "") }));
+  }
+
+  function mailBodyIsEmpty() {
+    return !mailQuill || mailQuill.getText().trim() === "";
   }
 
   function recipientValue() {
@@ -963,39 +987,39 @@
     byId("confirmMailButton").disabled = !ready;
   }
 
-  function fillMailTemplate(text) {
+  function fillMailTemplate(text, asHtml) {
     const order = state.mailOrder || {};
     const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
-    const tokens = {
-      "{{받는사람}}": recipientValue() || order.buyerEmail || order.buyerEmailMask || "받는 사람",
-      "{{상품명}}": mailTemplateProduct(),
-      "{{주문번호}}": order.externalOrderId || order.orderId || "-",
+    const esc = asHtml ? escapeHtml : (v) => v;
+    const scalars = {
+      "{{받는사람}}": esc(recipientValue() || order.buyerEmail || order.buyerEmailMask || "받는 사람"),
+      "{{상품명}}": esc(mailTemplateProduct()),
+      "{{주문번호}}": esc(order.externalOrderId || order.orderId || "-"),
       "{{코드수}}": String(codes.length),
-      "{{코드목록}}": mailCodeLines(),
     };
     let out = String(text || "");
-    for (const [token, value] of Object.entries(tokens)) {
+    for (const [token, value] of Object.entries(scalars)) {
       out = out.split(token).join(value);
     }
+    out = out.split("{{코드목록}}").join(asHtml ? mailCodeLinesHtml() : mailCodeLinesText());
     return out;
   }
 
   function renderMailPreview() {
-    const subject = fillMailTemplate(byId("mailSubjectInput").value).trim();
+    const subject = fillMailTemplate(byId("mailSubjectInput").value, false).trim();
     byId("mailPreviewSubject").textContent = subject || "(제목 없음)";
-    byId("mailPreviewBody").textContent = fillMailTemplate(byId("mailBodyInput").value);
+    byId("mailPreviewBody").innerHTML = fillMailTemplate(getMailBodyHtml(), true);
   }
 
   function ensureMailTemplateLoaded() {
     const subjectEl = byId("mailSubjectInput");
-    const bodyEl = byId("mailBodyInput");
     if (!subjectEl.value.trim()) subjectEl.value = DEFAULT_MAIL_TEMPLATE.subject;
-    if (!bodyEl.value.trim()) bodyEl.value = DEFAULT_MAIL_TEMPLATE.body;
+    if (mailBodyIsEmpty()) setMailBodyHtml(DEFAULT_MAIL_TEMPLATE.body);
   }
 
   function resetMailTemplate() {
     byId("mailSubjectInput").value = DEFAULT_MAIL_TEMPLATE.subject;
-    byId("mailBodyInput").value = DEFAULT_MAIL_TEMPLATE.body;
+    setMailBodyHtml(DEFAULT_MAIL_TEMPLATE.body);
     renderMailPreview();
   }
 
@@ -1009,9 +1033,10 @@
     byId("mailSummary").textContent = "코드를 불러오는 중…";
     byId("mailCodeList").innerHTML = '<p class="todo-empty">불러오는 중…</p>';
     byId("mailRecipientInput").value = "";
-    byId("mailTargetOrder").textContent = "-";
-    byId("mailTargetCount").textContent = "-";
+    byId("mailTargetOrder").value = "-";
+    byId("mailCodeCount").textContent = "";
     byId("confirmMailButton").disabled = true;
+    initMailEditor();
     ensureMailTemplateLoaded();
     renderMailPreview();
     if (!mailDialog.open) mailDialog.showModal();
@@ -1027,8 +1052,8 @@
       state.mailCodes = Array.isArray(data.codes) ? data.codes : [];
       const orderLabel = state.mailOrder.externalOrderId || orderId;
       byId("mailSummary").textContent = "받는 사람과 발급된 코드를 확인한 뒤 발송하세요.";
-      byId("mailTargetOrder").textContent = orderLabel;
-      byId("mailTargetCount").textContent = `${state.mailCodes.length}개`;
+      byId("mailTargetOrder").value = orderLabel;
+      byId("mailCodeCount").textContent = `(발급수량: ${state.mailCodes.length}개)`;
       applyRecipientFromOrder();
       renderMailCodes();
       renderMailPreview();
@@ -1630,7 +1655,6 @@
     syncMailConfirmState();
   });
   byId("mailSubjectInput").addEventListener("input", renderMailPreview);
-  byId("mailBodyInput").addEventListener("input", renderMailPreview);
   byId("resetMailTemplateButton").addEventListener("click", resetMailTemplate);
   byId("mailCodeList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-mail-copy-code]");

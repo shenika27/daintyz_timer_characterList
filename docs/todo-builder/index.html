@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="CharacterTodo 캐릭터 제작 및 판매 코드 관리 빌더">
   <title>todo-builder | daintyz builder</title>
+  <link rel="stylesheet" href="./vendor/quill.snow.css">
   <link rel="stylesheet" href="../shared/builder-shell.css">
   <link rel="stylesheet" href="./todo-builder.css">
 </head>
@@ -452,10 +453,10 @@
             <span>받는 사람 (수신 이메일)</span>
             <input id="mailRecipientInput" type="email" autocomplete="off" spellcheck="false" placeholder="buyer@example.com">
           </label>
-          <div class="todo-mail-target-meta">
-            <div><span>주문번호</span><strong id="mailTargetOrder">-</strong></div>
-            <div><span>발급 코드</span><strong id="mailTargetCount">-</strong></div>
-          </div>
+          <label class="todo-mail-field todo-mail-order">
+            <span>주문번호</span>
+            <input id="mailTargetOrder" type="text" value="-" readonly tabindex="-1">
+          </label>
         </div>
         <p class="todo-mail-target-hint" id="mailRecipientHint">이 주소로 발송됩니다. 필요하면 직접 수정하세요.</p>
       </section>
@@ -470,23 +471,49 @@
               <span>제목</span>
               <input id="mailSubjectInput" type="text" maxlength="200" autocomplete="off">
             </label>
-            <label class="todo-mail-field">
+            <div class="todo-mail-field">
               <span>본문</span>
-              <textarea id="mailBodyInput" rows="12" spellcheck="false"></textarea>
-            </label>
+              <div class="todo-mail-body-editor">
+                <div id="mailBodyToolbar">
+                  <span class="ql-formats">
+                    <select class="ql-size"></select>
+                  </span>
+                  <span class="ql-formats">
+                    <button class="ql-bold"></button>
+                    <button class="ql-italic"></button>
+                    <button class="ql-underline"></button>
+                  </span>
+                  <span class="ql-formats">
+                    <select class="ql-color"></select>
+                    <select class="ql-background"></select>
+                  </span>
+                  <span class="ql-formats">
+                    <button class="ql-list" value="ordered"></button>
+                    <button class="ql-list" value="bullet"></button>
+                    <select class="ql-align"></select>
+                  </span>
+                  <span class="ql-formats">
+                    <button class="ql-link"></button>
+                    <button class="ql-image"></button>
+                    <button class="ql-clean"></button>
+                  </span>
+                </div>
+                <div id="mailBodyEditor"></div>
+              </div>
+            </div>
             <button class="todo-button todo-button-ghost todo-button-small" type="button" id="resetMailTemplateButton">기본 템플릿으로 되돌리기</button>
           </div>
           <div class="todo-mail-preview" aria-live="polite">
             <div class="todo-mail-preview-label">미리보기</div>
             <div class="todo-mail-preview-card">
               <div class="todo-mail-preview-subject" id="mailPreviewSubject"></div>
-              <pre class="todo-mail-preview-body" id="mailPreviewBody"></pre>
+              <div class="todo-mail-preview-body" id="mailPreviewBody"></div>
             </div>
           </div>
         </div>
       </section>
       <section class="todo-mail-section">
-        <h3 class="todo-mail-section-title">발급된 코드</h3>
+        <h3 class="todo-mail-section-title">발급된 코드 <span class="todo-mail-code-count" id="mailCodeCount"></span></h3>
         <div class="todo-code-list todo-code-list-compact" id="mailCodeList"></div>
       </section>
       <p class="todo-form-error" id="mailError" role="alert" hidden></p>
@@ -497,6 +524,7 @@
     </div>
   </dialog>
 
+  <script src="./vendor/quill.min.js"></script>
   <script src="../shared/builder-auth.js"></script>
   <script src="./todo-builder.js"></script>
 </body>
