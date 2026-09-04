@@ -1261,22 +1261,146 @@
 .todo-reason-dialog,
 .todo-code-dialog { width: min(480px, calc(100% - 28px)); }
 
-.todo-mail-dialog { width: min(560px, calc(100% - 28px)); }
-.todo-mail-section + .todo-mail-section { margin-top: 18px; }
+.todo-mail-dialog { width: min(880px, calc(100% - 28px)); }
+.todo-mail-section + .todo-mail-section { margin-top: 20px; }
 .todo-mail-section-title {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--shell-text, #1f2430);
 }
-.todo-mail-template {
-  padding: 14px 16px;
-  border: 1px dashed #d4d8e0;
-  border-radius: 10px;
-  background: #f8f9fb;
+.todo-mail-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 12px;
+}
+.todo-mail-token-hint {
   color: var(--shell-sub);
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-size: 11px;
+}
+.todo-mail-token-hint code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: #eef1fb;
+  color: #3a4794;
+  font: 600 11px/1.4 Consolas, monospace;
+}
+
+/* 발송 대상: 수신 주소(편집 가능) + 주문/코드 정보 */
+.todo-mail-target-section {
+  padding: 14px 16px;
+  border: 1px solid #dfe4f6;
+  border-radius: 12px;
+  background: #f6f8ff;
+}
+.todo-mail-target {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px 18px;
+  margin-top: 10px;
+}
+.todo-mail-recipient span { color: #2c3566; }
+.todo-mail-recipient input {
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.todo-mail-target-meta {
+  display: flex;
+  gap: 22px;
+  padding-bottom: 4px;
+}
+.todo-mail-target-meta div { display: grid; gap: 3px; }
+.todo-mail-target-meta span { color: var(--shell-sub); font-size: 11px; }
+.todo-mail-target-meta strong { color: #1f2740; font-size: 13px; font-weight: 800; }
+.todo-mail-target-hint { margin: 10px 0 0; color: var(--shell-sub); font-size: 11.5px; }
+.todo-mail-target-hint.is-warning { color: #c0392f; font-weight: 700; }
+
+@media (max-width: 560px) {
+  .todo-mail-target { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 템플릿: 왼쪽 에디터 · 오른쪽 미리보기 */
+.todo-mail-template-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.todo-mail-editor { display: grid; gap: 12px; }
+.todo-mail-field { display: grid; gap: 6px; color: #343b45; font-size: 12.5px; font-weight: 750; }
+.todo-mail-field input,
+.todo-mail-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--shell-line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--shell-ink);
+  font: inherit;
+  font-weight: 500;
+}
+.todo-mail-field textarea {
+  resize: vertical;
+  min-height: 220px;
+  font: 12.5px/1.6 "Segoe UI", "Malgun Gothic", sans-serif;
+}
+.todo-mail-field input:focus,
+.todo-mail-field textarea:focus {
+  outline: none;
+  border-color: var(--shell-accent);
+  box-shadow: 0 0 0 3px rgba(91, 124, 250, .12);
+}
+.todo-mail-editor .todo-button-small { justify-self: start; }
+
+.todo-mail-preview { display: grid; gap: 8px; }
+.todo-mail-preview-label { color: var(--shell-sub); font-size: 12px; font-weight: 700; }
+.todo-mail-preview-card {
+  overflow: hidden;
+  border: 1px solid #e0e4f4;
+  border-radius: 11px;
+  background: #fbfcfe;
+}
+.todo-mail-preview-subject {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e7eaf5;
+  background: #f2f5fd;
+  color: #1f2740;
+  font-size: 13px;
+  font-weight: 800;
+  word-break: break-word;
+}
+.todo-mail-preview-body {
+  margin: 0;
+  max-height: 320px;
+  padding: 14px;
+  overflow: auto;
+  color: #37404f;
+  font: 12.5px/1.65 "Segoe UI", "Malgun Gothic", sans-serif;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 발급 코드: 여러 열로 채워 세로 길이를 줄이고 넓은 여백을 없앤다 */
+.todo-code-list-compact {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  padding: 2px;
+  overflow: auto;
+}
+.todo-code-list-compact .todo-code-row {
+  gap: 8px;
+  padding: 8px 10px;
+}
+.todo-code-list-compact .todo-code-value { font-size: 13px; }
+
+@media (max-width: 680px) {
+  .todo-mail-template-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .todo-dialog-header {

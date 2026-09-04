@@ -65,6 +65,26 @@
     { id: "typing", label: "타이핑", description: "키를 누르고 있는 동안" },
   ]);
   const AUDIO_ACTIONS = Object.freeze(CHARACTER_ACTIONS.filter((action) => action.id !== "default"));
+  const DEFAULT_MAIL_TEMPLATE = Object.freeze({
+    subject: "[CharacterTodo] 주문하신 캐릭터 코드를 보내드립니다",
+    body: [
+      "안녕하세요, CharacterTodo입니다.",
+      "",
+      "주문해 주셔서 감사합니다. 아래 코드를 앱에서 등록하면 캐릭터를 바로 사용하실 수 있습니다.",
+      "",
+      "· 상품: {{상품명}}",
+      "· 주문번호: {{주문번호}}",
+      "· 발급 코드 ({{코드수}}개)",
+      "{{코드목록}}",
+      "",
+      "[등록 방법]",
+      "1. CharacterTodo 앱을 실행합니다.",
+      "2. 설정 → 캐릭터 → 구매 코드 등록에 위 코드를 입력합니다.",
+      "",
+      "코드가 보이지 않거나 등록이 안 되면 이 메일에 회신해 주세요.",
+      "감사합니다.",
+    ].join("\n"),
+  });
   const state = {
     characters: [],
     entries: [],
@@ -901,6 +921,84 @@
     `).join("");
   }
 
+  function mailTemplateProduct() {
+    const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
+    const products = [...new Set(codes.map((c) => String(c.product || "").trim()).filter(Boolean))];
+    return products.length ? products.join(", ") : "구매 상품";
+  }
+
+  function mailCodeLines() {
+    const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
+    if (!codes.length) return "  (발급된 코드 없음)";
+    return codes.map((c) => `  - ${c.code}${c.product ? `  (${c.product})` : ""}`).join("\n");
+  }
+
+  function recipientValue() {
+    return byId("mailRecipientInput").value.trim();
+  }
+
+  function isEmailish(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  }
+
+  function applyRecipientFromOrder() {
+    const order = state.mailOrder || {};
+    const input = byId("mailRecipientInput");
+    const hint = byId("mailRecipientHint");
+    if (order.buyerEmail) {
+      input.value = order.buyerEmail;
+      hint.textContent = "이 주소로 발송됩니다. 필요하면 직접 수정하세요.";
+      hint.classList.remove("is-warning");
+    } else {
+      // 복호화 값이 없으면 마스킹만 참고로 보여주고 관리자가 직접 입력하도록 비운다.
+      input.value = "";
+      input.placeholder = order.buyerEmailMask || "buyer@example.com";
+      hint.textContent = "수신 주소를 불러오지 못했습니다. 발송할 이메일을 직접 입력해 주세요.";
+      hint.classList.add("is-warning");
+    }
+  }
+
+  function syncMailConfirmState() {
+    const ready = state.mailCodes.length > 0 && isEmailish(recipientValue());
+    byId("confirmMailButton").disabled = !ready;
+  }
+
+  function fillMailTemplate(text) {
+    const order = state.mailOrder || {};
+    const codes = Array.isArray(state.mailCodes) ? state.mailCodes : [];
+    const tokens = {
+      "{{받는사람}}": recipientValue() || order.buyerEmail || order.buyerEmailMask || "받는 사람",
+      "{{상품명}}": mailTemplateProduct(),
+      "{{주문번호}}": order.externalOrderId || order.orderId || "-",
+      "{{코드수}}": String(codes.length),
+      "{{코드목록}}": mailCodeLines(),
+    };
+    let out = String(text || "");
+    for (const [token, value] of Object.entries(tokens)) {
+      out = out.split(token).join(value);
+    }
+    return out;
+  }
+
+  function renderMailPreview() {
+    const subject = fillMailTemplate(byId("mailSubjectInput").value).trim();
+    byId("mailPreviewSubject").textContent = subject || "(제목 없음)";
+    byId("mailPreviewBody").textContent = fillMailTemplate(byId("mailBodyInput").value);
+  }
+
+  function ensureMailTemplateLoaded() {
+    const subjectEl = byId("mailSubjectInput");
+    const bodyEl = byId("mailBodyInput");
+    if (!subjectEl.value.trim()) subjectEl.value = DEFAULT_MAIL_TEMPLATE.subject;
+    if (!bodyEl.value.trim()) bodyEl.value = DEFAULT_MAIL_TEMPLATE.body;
+  }
+
+  function resetMailTemplate() {
+    byId("mailSubjectInput").value = DEFAULT_MAIL_TEMPLATE.subject;
+    byId("mailBodyInput").value = DEFAULT_MAIL_TEMPLATE.body;
+    renderMailPreview();
+  }
+
   async function openMailDialog(orderId) {
     if (!orderId) {
       showNotice("주문 정보가 없습니다. 코드를 먼저 발급해 주세요.", "error", true);
@@ -910,7 +1008,12 @@
     byId("mailError").textContent = "";
     byId("mailSummary").textContent = "코드를 불러오는 중…";
     byId("mailCodeList").innerHTML = '<p class="todo-empty">불러오는 중…</p>';
+    byId("mailRecipientInput").value = "";
+    byId("mailTargetOrder").textContent = "-";
+    byId("mailTargetCount").textContent = "-";
     byId("confirmMailButton").disabled = true;
+    ensureMailTemplateLoaded();
+    renderMailPreview();
     if (!mailDialog.open) mailDialog.showModal();
     try {
       const data = await api(`/v1/todo/orders/${encodeURIComponent(orderId)}/codes`);
@@ -919,12 +1022,17 @@
         orderId,
         externalOrderId: order.external_order_id || "",
         buyerEmailMask: order.buyer_email_mask || "",
+        buyerEmail: order.buyer_email || "",
       };
       state.mailCodes = Array.isArray(data.codes) ? data.codes : [];
-      byId("mailSummary").textContent =
-        `${state.mailOrder.buyerEmailMask || "받는 사람"} · ${state.mailOrder.externalOrderId || orderId} · 코드 ${state.mailCodes.length}개`;
+      const orderLabel = state.mailOrder.externalOrderId || orderId;
+      byId("mailSummary").textContent = "받는 사람과 발급된 코드를 확인한 뒤 발송하세요.";
+      byId("mailTargetOrder").textContent = orderLabel;
+      byId("mailTargetCount").textContent = `${state.mailCodes.length}개`;
+      applyRecipientFromOrder();
       renderMailCodes();
-      byId("confirmMailButton").disabled = state.mailCodes.length === 0;
+      renderMailPreview();
+      syncMailConfirmState();
     } catch (error) {
       byId("mailError").textContent = error.message;
       byId("mailError").hidden = false;
@@ -1517,6 +1625,13 @@
   byId("closeMailButton").addEventListener("click", closeMailDialog);
   byId("cancelMailButton").addEventListener("click", closeMailDialog);
   byId("confirmMailButton").addEventListener("click", sendMail);
+  byId("mailRecipientInput").addEventListener("input", () => {
+    renderMailPreview();
+    syncMailConfirmState();
+  });
+  byId("mailSubjectInput").addEventListener("input", renderMailPreview);
+  byId("mailBodyInput").addEventListener("input", renderMailPreview);
+  byId("resetMailTemplateButton").addEventListener("click", resetMailTemplate);
   byId("mailCodeList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-mail-copy-code]");
     if (!button) return;

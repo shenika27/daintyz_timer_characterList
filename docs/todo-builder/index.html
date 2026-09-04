@@ -445,13 +445,49 @@
       <button class="todo-icon-button" type="button" id="closeMailButton" aria-label="메일 발송 닫기">×</button>
     </div>
     <div class="todo-dialog-body">
-      <section class="todo-mail-section">
-        <h3 class="todo-mail-section-title">메일 템플릿</h3>
-        <div class="todo-mail-template" id="mailTemplatePreview">템플릿은 다음 단계에서 편집합니다.</div>
+      <section class="todo-mail-section todo-mail-target-section">
+        <h3 class="todo-mail-section-title">발송 대상</h3>
+        <div class="todo-mail-target">
+          <label class="todo-mail-field todo-mail-recipient">
+            <span>받는 사람 (수신 이메일)</span>
+            <input id="mailRecipientInput" type="email" autocomplete="off" spellcheck="false" placeholder="buyer@example.com">
+          </label>
+          <div class="todo-mail-target-meta">
+            <div><span>주문번호</span><strong id="mailTargetOrder">-</strong></div>
+            <div><span>발급 코드</span><strong id="mailTargetCount">-</strong></div>
+          </div>
+        </div>
+        <p class="todo-mail-target-hint" id="mailRecipientHint">이 주소로 발송됩니다. 필요하면 직접 수정하세요.</p>
+      </section>
+      <section class="todo-mail-section todo-mail-template-section">
+        <div class="todo-mail-section-head">
+          <h3 class="todo-mail-section-title">메일 템플릿</h3>
+          <span class="todo-mail-token-hint">치환: <code>{{받는사람}}</code> <code>{{상품명}}</code> <code>{{주문번호}}</code> <code>{{코드수}}</code> <code>{{코드목록}}</code></span>
+        </div>
+        <div class="todo-mail-template-grid">
+          <div class="todo-mail-editor">
+            <label class="todo-mail-field">
+              <span>제목</span>
+              <input id="mailSubjectInput" type="text" maxlength="200" autocomplete="off">
+            </label>
+            <label class="todo-mail-field">
+              <span>본문</span>
+              <textarea id="mailBodyInput" rows="12" spellcheck="false"></textarea>
+            </label>
+            <button class="todo-button todo-button-ghost todo-button-small" type="button" id="resetMailTemplateButton">기본 템플릿으로 되돌리기</button>
+          </div>
+          <div class="todo-mail-preview" aria-live="polite">
+            <div class="todo-mail-preview-label">미리보기</div>
+            <div class="todo-mail-preview-card">
+              <div class="todo-mail-preview-subject" id="mailPreviewSubject"></div>
+              <pre class="todo-mail-preview-body" id="mailPreviewBody"></pre>
+            </div>
+          </div>
+        </div>
       </section>
       <section class="todo-mail-section">
         <h3 class="todo-mail-section-title">발급된 코드</h3>
-        <div class="todo-code-list" id="mailCodeList"></div>
+        <div class="todo-code-list todo-code-list-compact" id="mailCodeList"></div>
       </section>
       <p class="todo-form-error" id="mailError" role="alert" hidden></p>
       <div class="todo-form-actions todo-dialog-actions">
