@@ -1262,13 +1262,18 @@
 .todo-code-dialog { width: min(480px, calc(100% - 28px)); }
 
 .todo-mail-dialog {
-  /* 넓게 + 세로로 더 활용. 본문이 다이얼로그 높이에 맞춰 스크롤되도록 flex 컬럼. */
-  width: min(1040px, calc(100% - 28px));
+  width: min(1120px, calc(100% - 28px));
   max-height: min(920px, calc(100vh - 32px));
+}
+/* flex 컬럼은 반드시 [open]에 걸어야 한다. 브라우저 기본 dialog[open]{display:block}
+   보다 명시도가 높아 실제로 적용되고, 닫혔을 때는 매칭되지 않아 정상적으로 숨겨진다.
+   (전에는 .todo-mail-dialog{display:flex}가 기본 규칙에 밀려 미적용 → 본문이
+    뷰포트 밖으로 넘쳐 정렬·닫힘 오작동) */
+.todo-mail-dialog[open] {
   display: flex;
   flex-direction: column;
 }
-.todo-mail-dialog .todo-dialog-body {
+.todo-mail-dialog[open] .todo-dialog-body {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
@@ -1429,18 +1434,26 @@
   overscroll-behavior: contain; /* 에디터 스크롤이 팝업/페이지로 전파되지 않게 */
 }
 
-/* 발급 코드: 여러 열로 채워 세로 길이를 줄이고 넓은 여백을 없앤다.
+/* 발급 코드: 한 코드가 한 줄(전체 폭)로 길게 나오도록 단일 열.
    자체 스크롤을 두지 않고 다이얼로그 본문의 단일 스크롤에 포함시킨다. */
 .todo-code-list-compact {
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
   padding: 2px;
 }
 .todo-code-list-compact .todo-code-row {
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 9px 12px;
 }
-.todo-code-list-compact .todo-code-value { font-size: 13px; }
+/* 코드값과 메타(상품·발급회차)를 한 줄에 나란히 */
+.todo-code-list-compact .todo-code-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.todo-code-list-compact .todo-code-meta { display: inline; margin-top: 0; }
 
 @media (max-width: 680px) {
   .todo-mail-template-grid { grid-template-columns: minmax(0, 1fr); }
