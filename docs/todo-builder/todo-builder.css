@@ -977,18 +977,36 @@
 }
 
 .todo-orders-heading {
-  align-items: flex-end;
+  align-items: flex-start;
+  margin-bottom: 14px;
 }
 
+/* 검색 블록: 발급일(1행) → 검색어+검색(2행), 오른쪽 정렬 */
 .todo-search {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.todo-search-row {
+  display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
   gap: 7px;
 }
+.todo-search-row input[type="search"] { width: min(300px, 34vw); }
 
-.todo-search > input[type="search"] { width: min(300px, 34vw); }
+/* 상단 툴바: 메일 템플릿 편집(좌) ↔ 초기화·새로고침(우) */
+.todo-orders-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.todo-orders-toolbar-actions {
+  display: flex;
+  gap: 7px;
+}
 
 .todo-date-range {
   display: inline-flex;
@@ -1292,7 +1310,6 @@
   min-height: 0;
   max-height: none;
 }
-.todo-mail-template-open { margin-top: 10px; }
 .todo-mail-section + .todo-mail-section { margin-top: 20px; }
 .todo-mail-section-title {
   margin: 0;
@@ -1601,8 +1618,9 @@
   .todo-remove-item { justify-self: start; }
   .todo-orders-heading { align-items: stretch; flex-direction: column; }
   .todo-order-detail-heading { flex-direction: column; gap: 4px; }
-  .todo-search { flex-wrap: wrap; }
-  .todo-search > input[type="search"] { width: 100%; }
+  .todo-search { align-items: stretch; }
+  .todo-search-row { flex-wrap: wrap; }
+  .todo-search-row input[type="search"] { width: 100%; }
   .todo-date-range { width: 100%; }
   .todo-date-range input[type="date"] { flex: 1; width: auto; }
   .todo-notice { top: 122px; }

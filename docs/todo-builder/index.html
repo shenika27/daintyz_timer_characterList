@@ -260,23 +260,31 @@
             <p class="todo-kicker">발급 원장</p>
             <h2>주문별 코드 발급 현황</h2>
             <p>주문을 펼치면 상품별 코드 상태와 발급 이력을 확인할 수 있습니다.</p>
-            <button class="todo-button todo-button-ghost todo-button-small todo-mail-template-open" type="button" id="openMailTemplateButton">메일 템플릿 편집</button>
           </div>
           <form id="orderSearchForm" class="todo-search" role="search">
-            <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
-            <input id="orderSearchInput" type="search" maxlength="100" placeholder="주문번호·이메일·상품 검색">
-            <div class="todo-date-range">
-              <span>발급일</span>
-              <label class="todo-sr-only" for="orderIssuedFrom">발급 시작일</label>
-              <input id="orderIssuedFrom" type="date" title="발급 시작일">
-              <span aria-hidden="true">–</span>
-              <label class="todo-sr-only" for="orderIssuedTo">발급 종료일</label>
-              <input id="orderIssuedTo" type="date" title="발급 종료일">
+            <div class="todo-search-row">
+              <div class="todo-date-range">
+                <span>발급일</span>
+                <label class="todo-sr-only" for="orderIssuedFrom">발급 시작일</label>
+                <input id="orderIssuedFrom" type="date" title="발급 시작일">
+                <span aria-hidden="true">–</span>
+                <label class="todo-sr-only" for="orderIssuedTo">발급 종료일</label>
+                <input id="orderIssuedTo" type="date" title="발급 종료일">
+              </div>
             </div>
-            <button class="todo-button todo-button-secondary" type="submit">검색</button>
+            <div class="todo-search-row">
+              <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
+              <input id="orderSearchInput" type="search" maxlength="100" placeholder="주문번호·이메일·상품 검색">
+              <button class="todo-button todo-button-secondary" type="submit">검색</button>
+            </div>
+          </form>
+        </div>
+        <div class="todo-orders-toolbar">
+          <button class="todo-button todo-button-ghost todo-button-small" type="button" id="openMailTemplateButton">메일 템플릿 편집</button>
+          <div class="todo-orders-toolbar-actions">
             <button class="todo-button todo-button-ghost" type="button" id="resetOrderFiltersButton">초기화</button>
             <button class="todo-button todo-button-ghost" type="button" id="refreshOrdersButton">새로고침</button>
-          </form>
+          </div>
         </div>
 
         <div class="todo-table-wrap">

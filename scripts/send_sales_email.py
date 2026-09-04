@@ -98,12 +98,18 @@ def main() -> None:
     base = _env("WORKER_BASE_URL").rstrip("/")
     secret = _env("TODO_MAIL_SECRET")
     job_id = _env("JOB_ID")
-    naver_user = _env("NAVER_USER")
-    naver_pass = _env("NAVER_PASS")
-    mail_from = os.environ.get("MAIL_FROM", "").strip() or (
-        naver_user if "@" in naver_user else f"{naver_user}@naver.com")
 
+    # 네이버 자격정보 검증은 try 안에서 RuntimeError로 처리한다. 그래야 누락 시
+    # Worker에 FAILED로 콜백되어 빌더 화면에 원인이 명확히 표시된다.
+    # (_env는 SystemExit을 던져 except Exception에 안 잡히고 조용히 멈춘다)
     try:
+        naver_user = os.environ.get("NAVER_USER", "").strip()
+        naver_pass = os.environ.get("NAVER_PASS", "").strip()
+        if not naver_user or not naver_pass:
+            raise RuntimeError("네이버 SMTP 자격정보(NAVER_USER/NAVER_PASS)가 설정되지 않았습니다.")
+        mail_from = os.environ.get("MAIL_FROM", "").strip() or (
+            naver_user if "@" in naver_user else f"{naver_user}@naver.com")
+
         payload = _api(base, f"/v1/todo/email-jobs/{job_id}/payload", secret)
         if not payload.get("ok"):
             raise RuntimeError(payload.get("error", "페이로드 응답 오류"))
