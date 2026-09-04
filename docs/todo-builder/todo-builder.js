@@ -691,13 +691,17 @@
   }
 
   function codeMetrics(entry) {
-    return `
-      <span class="todo-metrics todo-metrics-summary">
-        <span>사용 가능 ${numberValue(entry.redeemable_count)}</span>
-        <span>소진 ${numberValue(entry.redeemed_count)}</span>
-        <span>환불 ${numberValue(entry.refunded_count)}</span>
-        <span>폐기 ${numberValue(entry.revoked_count)}</span>
-      </span>`;
+    // 0인 항목은 표시하지 않는다(있는 상태만 노출). 2×2 그리드로 줄바꿈.
+    const parts = [
+      ["사용 가능", entry.redeemable_count],
+      ["소진", entry.redeemed_count],
+      ["환불", entry.refunded_count],
+      ["폐기", entry.revoked_count],
+    ].filter(([, count]) => Number(count) > 0);
+    if (!parts.length) return '<span class="todo-table-sub">-</span>';
+    return `<span class="todo-metrics todo-metrics-summary">${
+      parts.map(([label, count]) => `<span>${label} ${numberValue(count)}</span>`).join("")
+    }</span>`;
   }
 
   function emailStatusBadge(entry) {

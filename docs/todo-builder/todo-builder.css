@@ -1248,9 +1248,15 @@
   font-size: 10.5px;
 }
 
+/* 코드 현황을 2×2로 고정 줄바꿈(사용가능·소진 / 환불·폐기) → 열 폭 축소, 발송일 폭 확보 */
 .todo-metrics-summary {
   margin-top: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 3px 12px;
+  justify-content: start;
 }
+.todo-metrics-summary > span { white-space: nowrap; }
 
 .todo-empty {
   margin: 0;
