@@ -108,6 +108,7 @@
     currentOrder: null,
     mailOrder: null,
     mailCodes: [],
+    mailTemplate: null,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -121,25 +122,23 @@
   const revealDialog = byId("revealDialog");
   const mailDialog = byId("mailDialog");
   const mailTemplateDialog = byId("mailTemplateDialog");
-  const MAIL_TEMPLATE_STORAGE_KEY = "todo-builder:mail-template";
   let mailQuill = null;
   let mailTplQuill = null;
   let mailEditSnapshot = null;
 
-  // 저장된 기본 템플릿(브라우저 로컬). 없으면 공장 기본값(DEFAULT_MAIL_TEMPLATE)을 쓴다.
-  function storedMailTemplate() {
-    try {
-      const raw = localStorage.getItem(MAIL_TEMPLATE_STORAGE_KEY);
-      if (raw) {
-        const t = JSON.parse(raw);
-        if (t && typeof t.subject === "string" && typeof t.body === "string") return t;
-      }
-    } catch (err) { /* 저장소 접근 불가 시 기본값 */ }
-    return { subject: DEFAULT_MAIL_TEMPLATE.subject, body: DEFAULT_MAIL_TEMPLATE.body };
+  // 저장된 기본 템플릿(Worker/D1). state.mailTemplate에 캐시하고, 없으면 공장 기본값을 쓴다.
+  function currentMailTemplate() {
+    return state.mailTemplate || { subject: DEFAULT_MAIL_TEMPLATE.subject, body: DEFAULT_MAIL_TEMPLATE.body };
   }
 
-  function persistMailTemplate(tpl) {
-    try { localStorage.setItem(MAIL_TEMPLATE_STORAGE_KEY, JSON.stringify(tpl)); } catch (err) { /* 무시 */ }
+  async function fetchMailTemplate() {
+    try {
+      const res = await api("/v1/todo/mail-template");
+      if (res && res.template && typeof res.template.subject === "string" && typeof res.template.body === "string") {
+        state.mailTemplate = { subject: res.template.subject, body: res.template.body };
+      }
+    } catch (err) { /* 실패 시 캐시/기본값 유지 */ }
+    return currentMailTemplate();
   }
 
   function escapeHtml(value) {
@@ -1062,18 +1061,14 @@
     byId("mailPreviewBody").innerHTML = fillMailTemplate(getMailBodyHtml(), true);
   }
 
-  // 발송 다이얼로그를 열 때마다 저장된 기본 템플릿을 새로 불러온다(템플릿 편집 결과 반영).
-  function ensureMailTemplateLoaded() {
-    const tpl = storedMailTemplate();
+  function applyMailTemplateToSendEditor(tpl) {
     byId("mailSubjectInput").value = tpl.subject;
     setMailBodyHtml(tpl.body);
   }
 
   // 발송 편집 화면의 '기본 템플릿으로 되돌리기' = 저장된 템플릿으로 되돌린다.
   function resetMailTemplate() {
-    const tpl = storedMailTemplate();
-    byId("mailSubjectInput").value = tpl.subject;
-    setMailBodyHtml(tpl.body);
+    applyMailTemplateToSendEditor(currentMailTemplate());
     renderMailPreview();
   }
 
@@ -1092,17 +1087,21 @@
     mailTplQuill.setContents(mailTplQuill.clipboard.convert({ html: String(html || "") }));
   }
 
-  function openMailTemplateDialog() {
+  async function openMailTemplateDialog() {
     initMailTemplateEditor();
-    const tpl = storedMailTemplate();
-    byId("mailTplSubjectInput").value = tpl.subject;
-    setMailTplBodyHtml(tpl.body);
     byId("mailTemplateError").hidden = true;
     byId("mailTemplateError").textContent = "";
+    // 우선 캐시/기본값으로 즉시 채우고, 서버 최신본을 받아 갱신한다.
+    let tpl = currentMailTemplate();
+    byId("mailTplSubjectInput").value = tpl.subject;
+    setMailTplBodyHtml(tpl.body);
     if (!mailTemplateDialog.open) mailTemplateDialog.showModal();
+    tpl = await fetchMailTemplate();
+    byId("mailTplSubjectInput").value = tpl.subject;
+    setMailTplBodyHtml(tpl.body);
   }
 
-  function saveMailTemplateDialog() {
+  async function saveMailTemplateDialog() {
     const subject = byId("mailTplSubjectInput").value.trim();
     if (!subject) {
       byId("mailTemplateError").textContent = "제목을 입력해 주세요.";
@@ -1110,9 +1109,19 @@
       return;
     }
     const body = mailTplQuill ? mailTplQuill.root.innerHTML : DEFAULT_MAIL_TEMPLATE.body;
-    persistMailTemplate({ subject, body });
-    mailTemplateDialog.close();
-    showNotice("메일 템플릿을 저장했습니다.", "success");
+    const button = byId("mailTemplateSaveButton");
+    setButtonBusy(button, true, "저장 중…");
+    try {
+      const res = await api("/v1/todo/mail-template", { method: "PUT", body: { subject, body } });
+      state.mailTemplate = (res && res.template) ? res.template : { subject, body };
+      mailTemplateDialog.close();
+      showNotice("메일 템플릿을 저장했습니다.", "success");
+    } catch (error) {
+      byId("mailTemplateError").textContent = error.message;
+      byId("mailTemplateError").hidden = false;
+    } finally {
+      setButtonBusy(button, false);
+    }
   }
 
   function resetMailTemplateDialogToDefault() {
@@ -1137,10 +1146,14 @@
     byId("confirmMailButton").disabled = true;
     showMailStep("preview");
     initMailEditor();
-    ensureMailTemplateLoaded();
+    applyMailTemplateToSendEditor(currentMailTemplate());
     if (!mailDialog.open) mailDialog.showModal();
     try {
-      const data = await api(`/v1/todo/orders/${encodeURIComponent(orderId)}/codes`);
+      const [data, tpl] = await Promise.all([
+        api(`/v1/todo/orders/${encodeURIComponent(orderId)}/codes`),
+        fetchMailTemplate(),
+      ]);
+      applyMailTemplateToSendEditor(tpl);
       const order = data.order || {};
       state.mailOrder = {
         orderId,
@@ -1183,6 +1196,12 @@
       showNotice("발송할 주문 정보가 없습니다. 코드를 먼저 발급해 주세요.", "error", true);
       return;
     }
+    const recipient = recipientValue();
+    if (!isEmailish(recipient)) {
+      byId("mailPreviewError").textContent = "수신 이메일 주소를 확인해 주세요.";
+      byId("mailPreviewError").hidden = false;
+      return;
+    }
     const button = byId("confirmMailButton");
     const errorElement = byId("mailPreviewError");
     errorElement.hidden = true;
@@ -1190,6 +1209,11 @@
     try {
       const result = await api(`/v1/todo/orders/${encodeURIComponent(order.orderId)}/send-email`, {
         method: "POST",
+        body: {
+          recipient,
+          subject: byId("mailSubjectInput").value,
+          body: getMailBodyHtml(),
+        },
       });
       const final = await pollMailJob(result.jobId);
       if (final.status === "SENT") {

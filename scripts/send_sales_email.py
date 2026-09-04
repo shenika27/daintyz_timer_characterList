@@ -6,17 +6,67 @@ Actions 입력·로그에 남기지 않고, Worker에 Bearer 시크릿 콜백으
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
 import smtplib
 import ssl
 import sys
 import urllib.request
+from email.header import Header
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formataddr
+from email.utils import formataddr, make_msgid
 
 NAVER_HOST = "smtp.naver.com"
 NAVER_PORT = 465  # SSL
+
+# 본문 HTML의 data: 이미지(에디터에서 삽입한 base64)를 찾아 CID 첨부로 변환한다.
+# 다수 메일 클라이언트가 data: 인라인 이미지를 차단하므로 cid: 참조로 바꿔 인라인 첨부한다.
+_DATA_IMG_RE = re.compile(
+    r'src\s*=\s*(["\'])data:image/(?P<subtype>[a-zA-Z0-9.+-]+);base64,(?P<data>[A-Za-z0-9+/=\s]+?)\1',
+    re.IGNORECASE,
+)
+
+
+def build_message(subject: str, html: str, mail_from: str, recipient: str):
+    """HTML 안의 base64 이미지를 CID 첨부로 바꾼 메일 메시지를 만든다."""
+    inline_images = []  # (cid, subtype, raw_bytes)
+
+    def _replace(match: "re.Match") -> str:
+        subtype = match.group("subtype").lower()
+        try:
+            raw = base64.b64decode("".join(match.group("data").split()))
+        except Exception:  # noqa: BLE001 - 손상된 데이터는 원본 유지
+            return match.group(0)
+        cid = make_msgid(domain="charactertodo.local")[1:-1]  # <...> 제거
+        inline_images.append((cid, subtype, raw))
+        return f'src="cid:{cid}"'
+
+    html_cid = _DATA_IMG_RE.sub(_replace, html)
+    html_part = MIMEText(html_cid, "html", "utf-8")
+
+    def _set_headers(message) -> None:
+        # 한글 제목·발신자명은 RFC2047로 인코딩해야 메일 클라이언트에서 깨지지 않는다.
+        message["Subject"] = Header(subject, "utf-8")
+        message["From"] = formataddr(("캐릭터 투두", mail_from), charset="utf-8")
+        message["To"] = recipient
+
+    if not inline_images:
+        _set_headers(html_part)
+        return html_part
+
+    root = MIMEMultipart("related")
+    _set_headers(root)
+    root.attach(html_part)
+    for cid, subtype, raw in inline_images:
+        image = MIMEImage(raw, _subtype=subtype)
+        image.add_header("Content-ID", f"<{cid}>")
+        image.add_header("Content-Disposition", "inline")
+        root.attach(image)
+    return root
 
 
 def _env(name: str) -> str:
@@ -58,10 +108,7 @@ def main() -> None:
         if not payload.get("ok"):
             raise RuntimeError(payload.get("error", "페이로드 응답 오류"))
         recipient = payload["recipient"]
-        msg = MIMEText(payload["html"], "html", "utf-8")
-        msg["Subject"] = payload["subject"]
-        msg["From"] = formataddr(("캐릭터 투두", mail_from))
-        msg["To"] = recipient
+        msg = build_message(payload["subject"], payload["html"], mail_from, recipient)
 
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL(NAVER_HOST, NAVER_PORT, timeout=30, context=context) as smtp:
