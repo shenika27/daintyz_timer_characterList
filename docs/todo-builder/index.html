@@ -260,6 +260,7 @@
             <p class="todo-kicker">발급 원장</p>
             <h2>주문별 코드 발급 현황</h2>
             <p>주문을 펼치면 상품별 코드 상태와 발급 이력을 확인할 수 있습니다.</p>
+            <button class="todo-button todo-button-ghost todo-button-small todo-mail-template-open" type="button" id="openMailTemplateButton">메일 템플릿 편집</button>
           </div>
           <form id="orderSearchForm" class="todo-search" role="search">
             <label class="todo-sr-only" for="orderSearchInput">주문 검색</label>
@@ -530,6 +531,67 @@
           <button class="todo-button todo-button-ghost" type="button" id="mailEditCancelButton">취소</button>
           <button class="todo-button todo-button-primary" type="button" id="mailEditSaveButton">저장</button>
         </div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="todo-dialog todo-mail-template-dialog" id="mailTemplateDialog" aria-labelledby="mailTemplateDialogTitle">
+    <div class="todo-dialog-header">
+      <div>
+        <p class="todo-kicker">메일 템플릿</p>
+        <h2 id="mailTemplateDialogTitle">메일 템플릿 편집</h2>
+        <p class="todo-dialog-summary">여기서 저장한 제목·본문이 이후 메일 발송의 기본값으로 사용됩니다.</p>
+      </div>
+      <button class="todo-icon-button" type="button" id="closeMailTemplateButton" aria-label="메일 템플릿 닫기">×</button>
+    </div>
+    <div class="todo-dialog-body">
+      <section class="todo-mail-section todo-mail-template-section">
+        <div class="todo-mail-section-head">
+          <h3 class="todo-mail-section-title">템플릿</h3>
+          <span class="todo-mail-token-hint">치환: <code>{{받는사람}}</code> <code>{{상품명}}</code> <code>{{주문번호}}</code> <code>{{코드수}}</code> <code>{{코드목록}}</code></span>
+        </div>
+        <div class="todo-mail-editor">
+          <label class="todo-mail-field">
+            <span>제목</span>
+            <input id="mailTplSubjectInput" type="text" maxlength="200" autocomplete="off">
+          </label>
+          <div class="todo-mail-field">
+            <span>본문</span>
+            <div class="todo-mail-body-editor">
+              <div id="mailTplBodyToolbar">
+                <span class="ql-formats">
+                  <select class="ql-size"></select>
+                </span>
+                <span class="ql-formats">
+                  <button class="ql-bold"></button>
+                  <button class="ql-italic"></button>
+                  <button class="ql-underline"></button>
+                </span>
+                <span class="ql-formats">
+                  <select class="ql-color"></select>
+                  <select class="ql-background"></select>
+                </span>
+                <span class="ql-formats">
+                  <button class="ql-list" value="ordered"></button>
+                  <button class="ql-list" value="bullet"></button>
+                  <select class="ql-align"></select>
+                </span>
+                <span class="ql-formats">
+                  <button class="ql-link"></button>
+                  <button class="ql-image"></button>
+                  <button class="ql-clean"></button>
+                </span>
+              </div>
+              <div id="mailTplBodyEditor"></div>
+            </div>
+          </div>
+          <button class="todo-button todo-button-ghost todo-button-small" type="button" id="resetMailTemplateDefaultButton">기본 템플릿으로 되돌리기</button>
+        </div>
+      </section>
+      <p class="todo-form-error" id="mailTemplateError" role="alert" hidden></p>
+      <div class="todo-form-actions todo-dialog-actions">
+        <button class="todo-button todo-button-ghost" type="button" id="mailTemplateCancelButton">취소</button>
+        <button class="todo-button todo-button-primary" type="button" id="mailTemplateSaveButton">저장</button>
       </div>
     </div>
   </dialog>

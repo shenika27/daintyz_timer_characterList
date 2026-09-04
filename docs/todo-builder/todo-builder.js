@@ -120,8 +120,27 @@
   const publishDialog = byId("publishDialog");
   const revealDialog = byId("revealDialog");
   const mailDialog = byId("mailDialog");
+  const mailTemplateDialog = byId("mailTemplateDialog");
+  const MAIL_TEMPLATE_STORAGE_KEY = "todo-builder:mail-template";
   let mailQuill = null;
+  let mailTplQuill = null;
   let mailEditSnapshot = null;
+
+  // 저장된 기본 템플릿(브라우저 로컬). 없으면 공장 기본값(DEFAULT_MAIL_TEMPLATE)을 쓴다.
+  function storedMailTemplate() {
+    try {
+      const raw = localStorage.getItem(MAIL_TEMPLATE_STORAGE_KEY);
+      if (raw) {
+        const t = JSON.parse(raw);
+        if (t && typeof t.subject === "string" && typeof t.body === "string") return t;
+      }
+    } catch (err) { /* 저장소 접근 불가 시 기본값 */ }
+    return { subject: DEFAULT_MAIL_TEMPLATE.subject, body: DEFAULT_MAIL_TEMPLATE.body };
+  }
+
+  function persistMailTemplate(tpl) {
+    try { localStorage.setItem(MAIL_TEMPLATE_STORAGE_KEY, JSON.stringify(tpl)); } catch (err) { /* 무시 */ }
+  }
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -1043,16 +1062,62 @@
     byId("mailPreviewBody").innerHTML = fillMailTemplate(getMailBodyHtml(), true);
   }
 
+  // 발송 다이얼로그를 열 때마다 저장된 기본 템플릿을 새로 불러온다(템플릿 편집 결과 반영).
   function ensureMailTemplateLoaded() {
-    const subjectEl = byId("mailSubjectInput");
-    if (!subjectEl.value.trim()) subjectEl.value = DEFAULT_MAIL_TEMPLATE.subject;
-    if (mailBodyIsEmpty()) setMailBodyHtml(DEFAULT_MAIL_TEMPLATE.body);
+    const tpl = storedMailTemplate();
+    byId("mailSubjectInput").value = tpl.subject;
+    setMailBodyHtml(tpl.body);
   }
 
+  // 발송 편집 화면의 '기본 템플릿으로 되돌리기' = 저장된 템플릿으로 되돌린다.
   function resetMailTemplate() {
-    byId("mailSubjectInput").value = DEFAULT_MAIL_TEMPLATE.subject;
-    setMailBodyHtml(DEFAULT_MAIL_TEMPLATE.body);
+    const tpl = storedMailTemplate();
+    byId("mailSubjectInput").value = tpl.subject;
+    setMailBodyHtml(tpl.body);
     renderMailPreview();
+  }
+
+  // ── 템플릿 편집 팝업(발송과 별개로 기본 템플릿 자체를 편집·저장) ──
+  function initMailTemplateEditor() {
+    if (mailTplQuill || typeof Quill === "undefined") return;
+    mailTplQuill = new Quill("#mailTplBodyEditor", {
+      theme: "snow",
+      modules: { toolbar: "#mailTplBodyToolbar" },
+      placeholder: "메일 본문 템플릿을 입력하세요…",
+    });
+  }
+
+  function setMailTplBodyHtml(html) {
+    if (!mailTplQuill) return;
+    mailTplQuill.setContents(mailTplQuill.clipboard.convert({ html: String(html || "") }));
+  }
+
+  function openMailTemplateDialog() {
+    initMailTemplateEditor();
+    const tpl = storedMailTemplate();
+    byId("mailTplSubjectInput").value = tpl.subject;
+    setMailTplBodyHtml(tpl.body);
+    byId("mailTemplateError").hidden = true;
+    byId("mailTemplateError").textContent = "";
+    if (!mailTemplateDialog.open) mailTemplateDialog.showModal();
+  }
+
+  function saveMailTemplateDialog() {
+    const subject = byId("mailTplSubjectInput").value.trim();
+    if (!subject) {
+      byId("mailTemplateError").textContent = "제목을 입력해 주세요.";
+      byId("mailTemplateError").hidden = false;
+      return;
+    }
+    const body = mailTplQuill ? mailTplQuill.root.innerHTML : DEFAULT_MAIL_TEMPLATE.body;
+    persistMailTemplate({ subject, body });
+    mailTemplateDialog.close();
+    showNotice("메일 템플릿을 저장했습니다.", "success");
+  }
+
+  function resetMailTemplateDialogToDefault() {
+    byId("mailTplSubjectInput").value = DEFAULT_MAIL_TEMPLATE.subject;
+    setMailTplBodyHtml(DEFAULT_MAIL_TEMPLATE.body);
   }
 
   async function openMailDialog(orderId) {
@@ -1691,6 +1756,13 @@
     syncMailConfirmState();
   });
   byId("resetMailTemplateButton").addEventListener("click", resetMailTemplate);
+
+  // 템플릿 편집 팝업
+  byId("openMailTemplateButton").addEventListener("click", openMailTemplateDialog);
+  byId("closeMailTemplateButton").addEventListener("click", () => mailTemplateDialog.close());
+  byId("mailTemplateCancelButton").addEventListener("click", () => mailTemplateDialog.close());
+  byId("mailTemplateSaveButton").addEventListener("click", saveMailTemplateDialog);
+  byId("resetMailTemplateDefaultButton").addEventListener("click", resetMailTemplateDialogToDefault);
   byId("mailCodeList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-mail-copy-code]");
     if (!button) return;

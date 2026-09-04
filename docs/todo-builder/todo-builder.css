@@ -1278,6 +1278,21 @@
   min-height: 0;
   max-height: none;
 }
+/* 템플릿 편집 팝업(단일 에디터라 더 좁게) */
+.todo-mail-template-dialog {
+  width: min(680px, calc(100% - 28px));
+  max-height: min(880px, calc(100vh - 32px));
+}
+.todo-mail-template-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.todo-mail-template-dialog[open] .todo-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+.todo-mail-template-open { margin-top: 10px; }
 .todo-mail-section + .todo-mail-section { margin-top: 20px; }
 .todo-mail-section-title {
   margin: 0;
