@@ -1112,7 +1112,7 @@
     const button = byId("mailTemplateSaveButton");
     setButtonBusy(button, true, "저장 중…");
     try {
-      const res = await api("/v1/todo/mail-template", { method: "PUT", body: { subject, body } });
+      const res = await api("/v1/todo/mail-template", { method: "POST", body: { subject, body } });
       state.mailTemplate = (res && res.template) ? res.template : { subject, body };
       mailTemplateDialog.close();
       showNotice("메일 템플릿을 저장했습니다.", "success");
