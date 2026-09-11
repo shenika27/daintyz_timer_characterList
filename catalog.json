@@ -95,6 +95,15 @@
       "createdAt": "2026-09-11T23:32:00",
       "version": 1,
       "assetVersion": 1
+    },
+    {
+      "skinId": "spc18",
+      "name": "test5",
+      "price": 0,
+      "prestige": false,
+      "createdAt": "2026-09-11T23:32:00",
+      "version": 1,
+      "assetVersion": 1
     }
   ]
 }
