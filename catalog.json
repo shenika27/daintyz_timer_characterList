@@ -88,15 +88,6 @@
       "version": 1
     },
     {
-      "skinId": "spc15",
-      "name": "test2",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-09-11T23:32:00",
-      "version": 1,
-      "assetVersion": 1
-    },
-    {
       "skinId": "spc16",
       "name": "test3",
       "price": 0,
