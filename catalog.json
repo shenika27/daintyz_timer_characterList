@@ -85,7 +85,9 @@
         }
       },
       "createdAt": "2026-08-30T22:13:42",
-      "version": 1
+      "version": 1,
+      "hidden": true,
+      "archived": true
     },
     {
       "skinId": "spc18",
