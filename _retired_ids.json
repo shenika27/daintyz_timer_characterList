@@ -101,6 +101,10 @@
     {
       "skinId": "spc17",
       "retiredAt": "2026-09-11"
+    },
+    {
+      "skinId": "spc18",
+      "retiredAt": "2026-09-12"
     }
   ]
 }
