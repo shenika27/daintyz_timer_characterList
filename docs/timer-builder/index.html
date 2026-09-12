@@ -584,6 +584,8 @@
 <script>
 // 실제 Android 위젯(FrameAnimationController.MIN_FRAME_DURATION_MS)과 같은 계약값.
 const WIDGET_MIN_FRAME_MS = 90;
+const WIDGET_MIN_LOOP_CYCLE_MS = 800;
+const GIF_DELAY_STEP_MS = 10;
 
 const STATES = [
   { key: "stop",     title: "정지", sub: "타이머 미작동 기본 모습", req: true,  defDur: 1000 },
@@ -817,6 +819,19 @@ function normalizedFrameDurationMs(value, fallback = 1000) {
   return Math.max(WIDGET_MIN_FRAME_MS, parseInt(value) || fallback);
 }
 
+function isLoopingPreview(stateKey) {
+  return stateKey === "running" || stateKey === "interlude";
+}
+
+function effectiveFrameDurationMs(stateKey, value, frameCount, fallback = 1000) {
+  const configured = normalizedFrameDurationMs(value, fallback);
+  if (!isLoopingPreview(stateKey) || frameCount <= 1) return configured;
+  const cycleFloor = Math.ceil(
+    WIDGET_MIN_LOOP_CYCLE_MS / frameCount / GIF_DELAY_STEP_MS,
+  ) * GIF_DELAY_STEP_MS;
+  return Math.max(configured, cycleFloor);
+}
+
 function isOneShotPreview(stateKey) {
   return stateKey === "stop" || stateKey === "pause" || stateKey === "complete";
 }
@@ -895,10 +910,14 @@ async function renderStatePreview(stateKey) {
     return;
   }
   animPreviewUrls[stateKey] = urls;
-  const dur = normalizedFrameDurationMs(store[stateKey].dur);
+  const configuredDur = normalizedFrameDurationMs(store[stateKey].dur);
+  const dur = effectiveFrameDurationMs(stateKey, configuredDur, urls.length);
   img.src = urls[0];
   const playback = stateKey === "running" ? "반복" : stateKey === "interlude" ? "지정 구간" : "1회";
-  cap.textContent = urls.length === 1 ? "정지 이미지 (1프레임)" : `▶ ${urls.length}프레임 · ${dur}ms · ${playback}`;
+  const durationLabel = dur === configuredDur
+    ? `${dur}ms`
+    : `입력 ${configuredDur}ms → 적용 ${dur}ms (최소 0.8초/회전)`;
+  cap.textContent = urls.length === 1 ? "정지 이미지 (1프레임)" : `▶ ${urls.length}프레임 · ${durationLabel} · ${playback}`;
   img.onclick = stateKey === "running" || urls.length === 1 ? null : () => renderStatePreview(stateKey);
   img.title = img.onclick ? "클릭하면 첫 프레임부터 다시 재생합니다." : "";
   img.style.cursor = img.onclick ? "pointer" : "default";
@@ -1329,7 +1348,7 @@ async function buildWidgetMotionAsset(stateKey, tctx) {
     composeWidgetFrame(ctx, geom, bmp, tctx, stateKey);
     return ctx.getImageData(0, 0, geom.W, geom.H).data;
   });
-  const frameDuration = normalizedFrameDurationMs(st.dur, 200);
+  const frameDuration = effectiveFrameDurationMs(stateKey, st.dur, ordered.length, 200);
   let frameData = baseFrameData;
   let frameDelays = baseFrameData.map(() => frameDuration);
   if (stateKey === "interlude") {
@@ -1393,7 +1412,7 @@ function buildSkinJson() {
     );
     return {
       frames: names,
-      frameDurationMs: normalizedFrameDurationMs(store[stateKey].dur),
+      frameDurationMs: effectiveFrameDurationMs(stateKey, store[stateKey].dur, names.length),
     };
   }
 
