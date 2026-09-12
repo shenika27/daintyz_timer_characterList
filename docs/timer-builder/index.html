@@ -1094,27 +1094,37 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// 숫자를 고해상으로 측정→PAD_FRAC 여백 포함해 time_area에 fitCenter(앱 renderTimeBitmap과 동일 규칙).
+// 숫자를 고해상으로 측정→PAD_FRAC 여백 포함해 time_area에 fitCenter.
+// 앱 WidgetUpdater.renderTimeBitmap과 **동일한 고정 지오메트리(tabular)**로 그려 위젯과 굵기·크기를 일치시킨다:
+//  - 폭: 숫자칸=0~9 최대 advance(자리폭 고정), 콜론=콜론 advance. 각 글자를 셀 중앙에 → 내용 무관 총폭 고정.
+//  - 높이: 폰트 메트릭(fontBoundingBox asc+desc) 고정값(글자 조합 무관).
+// 과거엔 measureText(text).width(advance) + actualBoundingBox(잉크 높이)로 잡아 앱(잉크 폭·높이)과 비율이
+// 달라 미리보기 숫자만 굵기가 어긋났다. bold도 붙이지 않는다(faux-bold 방지).
 function drawDigits(ctx, text, rect, family, color) {
   const px = 120;
   ctx.save();
-  // 앱 renderTimeBitmap은 커스텀 폰트를 볼드 없이 그대로 그린다(합성 볼드 X). 여기서 bold를 붙이면
-  // 커스텀 .ttf가 faux-bold 처리돼 미리보기 숫자만 실제 위젯보다 굵게 보인다 → bold 제거로 굵기 일치.
   ctx.font = `${px}px ${family}`;
-  ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  const m = ctx.measureText(text);
-  const tw = m.width;
-  const asc = m.actualBoundingBoxAscent  || px * 0.8;
-  const desc = m.actualBoundingBoxDescent || px * 0.2;
+  // tabular 셀 폭: 숫자는 0~9 최대 advance, 콜론은 콜론 advance.
+  let digitCellW = 0;
+  for (let d = 0; d <= 9; d++) digitCellW = Math.max(digitCellW, ctx.measureText(String(d)).width);
+  const cellW = (c) => (c === ":" ? ctx.measureText(":").width : digitCellW);
+  // 높이는 폰트 메트릭 고정값(글자 조합 무관) → 앱 fontMetrics(descent−ascent)와 동일 규칙.
+  const fm = ctx.measureText("0");
+  const asc = fm.fontBoundingBoxAscent  || px * 0.8;
+  const desc = fm.fontBoundingBoxDescent || px * 0.2;
   const th = asc + desc;
+  let tw = 0; for (const c of text) tw += cellW(c);
   const padX = tw * DIGIT_PAD_FRAC, padY = th * DIGIT_PAD_FRAC;
   const bw = tw + padX * 2, bh = th + padY * 2;
   const fit = fitRect(bw, bh, rect.x, rect.y, rect.w, rect.h, false);
   ctx.translate(fit.x, fit.y);
   ctx.scale(fit.w / bw, fit.h / bh);
   ctx.fillStyle = color;
-  ctx.fillText(text, padX, padY + asc);
+  ctx.textAlign = "center";
+  const baseline = padY + asc;
+  let x = padX;
+  for (const c of text) { const cw = cellW(c); ctx.fillText(c, x + cw / 2, baseline); x += cw; }
   ctx.restore();
 }
 
