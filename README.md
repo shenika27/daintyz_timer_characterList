@@ -10,7 +10,7 @@
 > (예: "감자" → 감자 캐릭터 + 흙밭 배경 / "우주" → 우주인 + 우주 배경)
 >
 > **구매는 테마(세트) 단위**입니다. 단, 사용자는 앱에서 **캐릭터와 타이머를 따로 골라 섞어 적용**할 수 있습니다.
-> (예: 감자 캐릭터 + 우주 타이머). 그래서 테마마다 `character/preview/{id}/` 폴더에 **대표 썸네일(`thumb.png`)과 행동별 미리보기(`motion_{state}.{gif,png}`)**를 함께 배포합니다.
+> (예: 감자 캐릭터 + 우주 타이머). 그래서 테마마다 `character/preview/{id}/` 폴더에 **대표 썸네일(`thumb.png`), 이미지 상세 미리보기(`detail.png`), 행동별 미리보기(`motion_{state}.{gif,png}`)**를 함께 배포합니다.
 
 ---
 
@@ -31,6 +31,7 @@ _retired_ids.json               ← 삭제된 skinId/productId 원장 (재사용
 character/                      ← 테마 에셋 묶음
   zip/{skinId}.zip              ← 무료 테마 한 세트 (유료 원본은 비공개 R2에만 저장)
   preview/{skinId}/thumb.png    ← 테마 썸네일 (상점·창고 목록 공용)
+  preview/{skinId}/detail.png   ← 이미지 전용 상세 미리보기
   preview/{skinId}/stop.png     ← 상점 카드용 투명 정지 스프라이트
   preview/{skinId}/motion_*.gif ← 상세화면 행동별 미리보기(1프레임 상태는 PNG)
 ```
@@ -253,11 +254,12 @@ character/                      ← 테마 에셋 묶음
 | 파일 | 쓰이는 곳 | 무엇을 담나 | 권장 |
 |---|---|---|---|
 | `character/preview/{skinId}/thumb.png` | 상점·창고 목록 | 테마 대표 모습 | 정사각 |
+| `character/preview/{skinId}/detail.png` | 이미지 상세 미리보기 | 화면에 전체 표시할 대표 이미지 한 장 | 한 변 1024px 이하 |
 | `character/preview/{skinId}/stop.png` | 상점 카드 | 정지 첫 프레임의 투명 캐릭터 | 빌더 자동 생성 |
 | `character/preview/{skinId}/motion_stop.png` | 상세 미리보기 | 정지 상태 위젯 합성본 | 빌더 자동 생성 |
 | `character/preview/{skinId}/motion_running.gif` 등 | 상세 미리보기 캐러셀 | 진행·중단·완료·인터루드 합성본 | 빌더 자동 생성 |
 
-- **썸네일 파일명은 `thumb.png` 고정**입니다.
+- 목록 썸네일과 이미지 상세 미리보기 파일명은 각각 `thumb.png`, `detail.png`로 고정입니다.
 - 상태가 한 프레임이면 `motion_{state}.png`, 두 프레임 이상이면 `motion_{state}.gif`로 생성됩니다.
 - 앱은 `stop`, `running`, `pause`, `complete`, `interlude` 순서로 존재하는 미리보기를 표시합니다.
 - 미리보기 파일이 하나도 없으면 보유 테마는 인터랙티브 위젯, 미보유 테마는 대표 썸네일로 폴백합니다.

@@ -475,16 +475,21 @@
     </div>
   </section>
 
-  <!-- 4. 대표 썸네일 -->
+  <!-- 4. 이미지 첨부 -->
   <section class="card">
-    <h2>4. 대표 썸네일</h2>
-    <p class="hint"><b>썸네일은 필수</b>입니다(상점 목록·타이머 탭에 뜨는 대표 이미지).<br>
-      상세화면의 행동별 미리보기는 위 프레임에서 자동 생성됩니다.</p>
-    <div class="grid">
+    <h2>4. 이미지 첨부</h2>
+    <p class="hint"><b>썸네일과 미리보기 이미지는 필수</b>입니다.<br>
+      행동별 미리보기는 위 프레임에서 별도로 자동 생성됩니다.</p>
+    <div class="grid two">
       <div class="state-card req">
         <h3>썸네일 (thumb.png)</h3>
         <p class="sub">상점 카드·타이머 탭에 뜨는 대표 1장.<br>정사각형 권장(아니면 경고), 한 변 1024px 이하.</p>
         <div id="asset_thumb"></div>
+      </div>
+      <div class="state-card req">
+        <h3>미리보기 이미지 (detail.png)</h3>
+        <p class="sub">이미지 미리보기 상세화면에 전체 표시되는 1장.<br>비율 제한 없음, 한 변 1024px 이하.</p>
+        <div id="asset_detail"></div>
       </div>
     </div>
   </section>
@@ -612,6 +617,7 @@ store.interlude = { frames: [], dur: ITL_DEF_DUR, pingpong: false };
 const assets = {};
 // 상점·창고 대표 썸네일. 행동별 상세 미리보기는 상태 프레임에서 자동 생성한다.
 let previewThumb = null;            // { file, url } | null
+let previewDetail = null;           // { file, url } | null
 
 let frameSeq = 0;
 
@@ -626,6 +632,12 @@ function clearPreviewThumb() {
   if (!previewThumb) return;
   URL.revokeObjectURL(previewThumb.url);
   previewThumb = null;
+}
+
+function clearPreviewDetail() {
+  if (!previewDetail) return;
+  URL.revokeObjectURL(previewDetail.url);
+  previewDetail = null;
 }
 
 function clearAssetStore() {
@@ -1066,6 +1078,7 @@ function outNameFor(slotId, file) {
 
 /* ---------- 대표 썸네일 ---------- */
 let thumbRender = null; // 편집 로드에서 다시 그리기 위해 보관.
+let detailRender = null;
 
 function buildThumbSlot() {
   const host = $("asset_thumb");
@@ -1104,6 +1117,44 @@ function buildThumbSlot() {
     render(); refresh();
   });
   thumbRender = render;
+  render();
+}
+
+function buildDetailSlot() {
+  const host = $("asset_detail");
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "image/*"; input.style.display = "none";
+  const view = document.createElement("div");
+  host.appendChild(view); host.appendChild(input);
+
+  function render() {
+    if (!previewDetail) {
+      view.innerHTML = `<div class="single-asset">
+        <div class="thumb" style="display:flex;align-items:center;justify-content:center;color:#c2c8d0;font-size:22px">＋</div>
+        <div class="meta"><b>미리보기 이미지</b>파일 없음 → detail.png</div>
+        <button class="pick" type="button">파일 선택</button></div>`;
+      view.querySelector(".pick").onclick = () => input.click();
+      view.querySelector(".thumb").onclick = () => input.click();
+    } else {
+      view.innerHTML = `<div class="single-asset">
+        <img class="thumb" src="${previewDetail.url}">
+        <div class="meta"><b>미리보기 이미지</b><span>detail.png</span></div>
+        <button class="clear-x" type="button" title="제거">✕</button></div>`;
+      view.querySelector(".clear-x").onclick = () => {
+        clearPreviewDetail(); render(); refresh();
+      };
+    }
+  }
+  input.addEventListener("change", async () => {
+    const f = input.files[0]; input.value = "";
+    if (!f) return;
+    const sz = await checkImageSize(f, "미리보기 이미지가");
+    if (!sz) return;
+    clearPreviewDetail();
+    previewDetail = { file: f, url: URL.createObjectURL(f) };
+    render(); refresh();
+  });
+  detailRender = render;
   render();
 }
 
@@ -1420,6 +1471,7 @@ function buildSkinJson() {
     if (!store[s.key].frames.length) errors.push(`'${s.title}' 상태 이미지를 1장 이상 올리세요.`);
   });
   if (!previewThumb) errors.push("미리보기 썸네일(thumb)을 올리세요. 상점·타이머 탭에 필수입니다.");
+  if (!previewDetail) errors.push("미리보기 이미지(detail)를 올리세요. 이미지 상세화면에 필수입니다.");
 
   const character = {
     stop: frameSet("stop"),
@@ -1556,7 +1608,7 @@ async function buildCharacterZipBlob(json, skinId) {
 /* ---------- 번들 zip 생성 (디자인레포 _inbox/ 업로드용) ----------
    구조 = 디자인레포 레이아웃 오버레이:
      character/zip/{skinId}.zip   ← 위 캐릭터 zip 그대로
-     character/preview/{skinId}/thumb.png
+     character/preview/{skinId}/thumb.png, detail.png
      character/preview/{skinId}/motion_{state}.{gif,png}
      catalog_entry.json           ← catalog.json "skins"에 병합할 항목
    Action(apply-skin-bundle)이 이 구조를 그대로 레포에 펼치고 catalog만 병합한다. */
@@ -1574,6 +1626,7 @@ async function buildBundleBlob() {
   // 2) 미리보기 (PNG로 재인코딩)
   const prevDir = bundle.folder(`character/preview/${skinId}`);
   prevDir.file("thumb.png", await toPngBlob(previewThumb.file));
+  prevDir.file("detail.png", await toPngBlob(previewDetail.file));
   // 상점 목록 카드용 '정지1' 원본 프레임(투명·캐릭터만, 타이머/흰배경 없음)을 stop.png로 발행한다.
   // motion_stop.png는 타이머 박스+흰 매트 합성본이라 상점 카드에선 흰 박스로 튄다 → 별도 깨끗한 스프라이트가 필요.
   if (store.stop?.frames?.[0]?.file) {
@@ -1791,6 +1844,7 @@ function resetBuilderState() {
     const ds = $("itlDurSec"); if (ds) ds.value = ""; }
   clearAssetStore();
   clearPreviewThumb();
+  clearPreviewDetail();
 }
 
 // pingpong으로 펼쳐진 프레임 이름(fwd + reverse(fwd[1..-2]))이면 원본 forward로 되돌린다.
@@ -1923,15 +1977,18 @@ async function loadSkinForEdit(entry) {
     $("fontSize").value = (font.sizeSp != null) ? font.sizeSp : "";
     $("fontFamily").value = font.family || "";
 
-    // 5) 대표 썸네일. 행동별 미리보기는 로드한 상태 프레임으로 다시 생성된다.
+    // 5) 목록 썸네일 + 이미지 상세 미리보기. 행동별 미리보기는 로드한 상태 프레임으로 다시 생성된다.
     const thumb = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/thumb.png`, "thumb.png");
     if (thumb) previewThumb = { file: thumb, url: URL.createObjectURL(thumb) };
+    const detail = await fileFromUrl(`${RAW_BASE}/character/preview/${entry.skinId}/detail.png`, "detail.png");
+    if (detail) previewDetail = { file: detail, url: URL.createObjectURL(detail) };
 
     // 6) UI 전체 다시 그리기
     STATES.forEach(s => renderFrames(s.key));
     renderFrames("interlude");
     Object.values(assetRenderers).forEach(r => r());
     if (thumbRender) thumbRender();
+    if (detailRender) detailRender();
     refresh();
     status.innerHTML = `✏️ <b>${entry.skinId}</b> 불러옴 — 수정 후 다시 zip을 만들어 업로드하면 갱신됩니다.`;
   } catch (e) {
@@ -2802,6 +2859,7 @@ buildAssetSlot("background", "타이머 배경", "image/*");
 BUTTONS.forEach(b => buildAssetSlot(b.key, b.label, "image/*"));
 buildAssetSlot("font", "숫자 폰트(.ttf)", ".ttf,font/ttf,application/octet-stream");
 buildThumbSlot();
+buildDetailSlot();
 
 // 현재 로컬 일시(yyyy-mm-ddThh:mm:ss). 창고 출시순 정렬이 같은 날 스킨도 초 단위로 구분하도록
 // 출시일(createdAt)에 시각까지 담는다. 사전식 비교가 곧 시간순이라 문자열 내림차순 정렬과 호환된다.

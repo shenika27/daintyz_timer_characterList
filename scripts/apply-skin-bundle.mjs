@@ -2,7 +2,7 @@
 //
 // 번들 구조(스킨빌더 = 이 레포 최상위 index.html 출력):
 //   character/zip/{skinId}.zip
-//   character/preview/{skinId}/thumb.png, stop.png, motion_{state}.{gif,png}
+//   character/preview/{skinId}/thumb.png, detail.png, stop.png, motion_{state}.{gif,png}
 //   catalog_entry.json   ← catalog.json "skins"에 upsert 할 항목
 //
 // 동작: 번들을 레포 레이아웃 그대로 펼치고(character/ 하위 zip·preview), catalog만 병합.

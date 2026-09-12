@@ -53,3 +53,12 @@ test("구운 GIF는 작동 상태만 무한 반복한다", () => {
   assert.match(builderSource, /stateKey === "interlude"/);
   assert.match(builderSource, /totalDuration - elapsed/);
 });
+
+test("빌더는 목록 썸네일과 이미지 상세 미리보기를 별도 파일로 발행한다", () => {
+  assert.match(builderSource, /<h2>4\. 이미지 첨부<\/h2>/);
+  assert.match(builderSource, /id="asset_thumb"/);
+  assert.match(builderSource, /id="asset_detail"/);
+  assert.match(builderSource, /if \(!previewDetail\) errors\.push/);
+  assert.match(builderSource, /prevDir\.file\("detail\.png", await toPngBlob\(previewDetail\.file\)\)/);
+  assert.match(builderSource, /character\/preview\/\$\{entry\.skinId\}\/detail\.png/);
+});
