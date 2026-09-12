@@ -582,6 +582,9 @@
 </footer>
 
 <script>
+// 실제 Android 위젯(FrameAnimationController.MIN_FRAME_DURATION_MS)과 같은 계약값.
+const WIDGET_MIN_FRAME_MS = 90;
+
 const STATES = [
   { key: "stop",     title: "정지", sub: "타이머 미작동 기본 모습", req: true,  defDur: 1000 },
   { key: "running",  title: "작동", sub: "타이머 카운트다운 중", req: true,  defDur: 500 },
@@ -769,13 +772,18 @@ function buildFrameCard(host, cfg) {
     <div class="drop" data-state="${cfg.key}">＋ 이미지 끌어다 놓기 / 클릭해서 선택 (여러 장 가능)</div>
     <ul class="frames" id="frames_${cfg.key}"></ul>
     <div class="anim-row"><div class="anim-box"><img id="anim_${cfg.key}" alt=""></div><span class="anim-cap" id="animcap_${cfg.key}">프레임 없음</span></div>
-    <div class="dur">프레임 간격 <input type="number" min="50" step="50" value="${cfg.defDur}" data-dur="${cfg.key}"> ms</div>
+    <div class="dur">프레임 간격 <input type="number" min="${WIDGET_MIN_FRAME_MS}" step="10" value="${cfg.defDur}" data-dur="${cfg.key}"> ms</div>
     <label class="loopchk"><input type="checkbox" data-pingpong="${cfg.key}"> 순환(왕복) — 01-02-03-04-03-02 식으로 되돌아오며 한 세트</label>`;
   host.appendChild(card);
 
   wireDropZone(card.querySelector(".drop"), files => addFrames(cfg.key, files));
   card.querySelector("[data-dur]").addEventListener("input", e => {
     store[cfg.key].dur = parseInt(e.target.value) || cfg.defDur; renderStatePreview(cfg.key); refresh();
+  });
+  card.querySelector("[data-dur]").addEventListener("change", e => {
+    store[cfg.key].dur = normalizedFrameDurationMs(e.target.value, cfg.defDur);
+    e.target.value = store[cfg.key].dur;
+    renderStatePreview(cfg.key); refresh();
   });
   card.querySelector("[data-pingpong]").addEventListener("change", e => {
     store[cfg.key].pingpong = e.target.checked; renderStatePreview(cfg.key); refresh();
@@ -797,30 +805,129 @@ function buildInterludeCard() {
   });
   // 주기·길이 입력은 값만 바뀌어도 검증/상태를 갱신.
   $("itlEveryMin").addEventListener("input", refresh);
-  $("itlDurSec").addEventListener("input", refresh);
+  $("itlDurSec").addEventListener("input", () => { renderStatePreview("interlude"); refresh(); });
 }
 
 /* ---------- 상태 프레임 애니메이션 미리보기 ---------- */
 const animTimers = {};
+const animPreviewUrls = {};
+const animRenderVersions = {};
+
+function normalizedFrameDurationMs(value, fallback = 1000) {
+  return Math.max(WIDGET_MIN_FRAME_MS, parseInt(value) || fallback);
+}
+
+function isOneShotPreview(stateKey) {
+  return stateKey === "stop" || stateKey === "pause" || stateKey === "complete";
+}
+
+function interludePreviewDurationMs() {
+  return Math.max(0, Math.round((parseFloat($("itlDurSec").value) || 0) * 1000));
+}
 
 // 재생 순서 objectURL 배열(pingpong 반영) — frameSet()의 이름 확장과 동일 규칙.
 function animUrls(stateKey) {
   return expandPingpong(store[stateKey].frames.map(fr => fr.url), store[stateKey].pingpong);
 }
 
-function renderStatePreview(stateKey) {
+function releaseAnimatedPreview(stateKey) {
+  (animPreviewUrls[stateKey] || []).forEach(url => URL.revokeObjectURL(url));
+  animPreviewUrls[stateKey] = [];
+}
+
+function releaseTimerContext(tctx) {
+  if (!tctx) return;
+  [tctx.bg, ...Object.values(tctx.skinButtons || {})].forEach(bitmap => bitmap?.close?.());
+  if (tctx.fontFace) document.fonts.delete(tctx.fontFace);
+}
+
+async function buildComposedPreviewUrls(stateKey) {
+  const ordered = expandPingpong(store[stateKey].frames, store[stateKey].pingpong);
+  if (!ordered.length) return [];
+  const [bitmaps, tctx] = await Promise.all([
+    Promise.all(ordered.map(frame => createImageBitmap(frame.file))),
+    loadTimerContext(),
+  ]);
+  try {
+    const geom = widgetGeom(bitmaps[0].width, bitmaps[0].height);
+    const canvas = document.createElement("canvas");
+    canvas.width = geom.W; canvas.height = geom.H;
+    const ctx = canvas.getContext("2d");
+    const urls = [];
+    for (const bitmap of bitmaps) {
+      composeWidgetFrame(ctx, geom, bitmap, tctx, stateKey);
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(
+        value => value ? resolve(value) : reject(new Error("미리보기 이미지 생성 실패")),
+        "image/png",
+      ));
+      urls.push(URL.createObjectURL(blob));
+    }
+    return urls;
+  } finally {
+    bitmaps.forEach(bitmap => bitmap.close?.());
+    releaseTimerContext(tctx);
+  }
+}
+
+function refreshAllStatePreviews() {
+  [...STATES.map(state => state.key), "interlude"].forEach(renderStatePreview);
+}
+
+async function renderStatePreview(stateKey) {
   const img = $("anim_" + stateKey);
   const cap = $("animcap_" + stateKey);
   if (!img || !cap) return;
-  if (animTimers[stateKey]) { clearInterval(animTimers[stateKey]); animTimers[stateKey] = null; }
-  const urls = animUrls(stateKey);
-  if (!urls.length) { img.removeAttribute("src"); cap.textContent = "프레임 없음"; return; }
-  const dur = Math.max(50, store[stateKey].dur || 1000);
+  if (animTimers[stateKey]) { clearTimeout(animTimers[stateKey]); animTimers[stateKey] = null; }
+  const renderVersion = (animRenderVersions[stateKey] || 0) + 1;
+  animRenderVersions[stateKey] = renderVersion;
+  releaseAnimatedPreview(stateKey);
+  if (!store[stateKey].frames.length) { img.removeAttribute("src"); cap.textContent = "프레임 없음"; return; }
+  cap.textContent = "실제 위젯 모습으로 합성 중…";
+  let urls;
+  try {
+    urls = await buildComposedPreviewUrls(stateKey);
+  } catch (error) {
+    if (animRenderVersions[stateKey] === renderVersion) cap.textContent = `미리보기 생성 실패: ${error.message}`;
+    return;
+  }
+  if (animRenderVersions[stateKey] !== renderVersion) {
+    urls.forEach(url => URL.revokeObjectURL(url));
+    return;
+  }
+  animPreviewUrls[stateKey] = urls;
+  const dur = normalizedFrameDurationMs(store[stateKey].dur);
   img.src = urls[0];
-  cap.textContent = urls.length === 1 ? "정지 이미지 (1프레임)" : `▶ ${urls.length}프레임 · ${dur}ms`;
+  const playback = stateKey === "running" ? "반복" : stateKey === "interlude" ? "지정 구간" : "1회";
+  cap.textContent = urls.length === 1 ? "정지 이미지 (1프레임)" : `▶ ${urls.length}프레임 · ${dur}ms · ${playback}`;
+  img.onclick = stateKey === "running" || urls.length === 1 ? null : () => renderStatePreview(stateKey);
+  img.title = img.onclick ? "클릭하면 첫 프레임부터 다시 재생합니다." : "";
+  img.style.cursor = img.onclick ? "pointer" : "default";
   if (urls.length > 1) {
-    let i = 0;
-    animTimers[stateKey] = setInterval(() => { i = (i + 1) % urls.length; img.src = urls[i]; }, dur);
+    const startedAt = performance.now();
+    const interludeDuration = stateKey === "interlude" ? interludePreviewDurationMs() : 0;
+    const finishAt = isOneShotPreview(stateKey)
+      ? (urls.length - 1) * dur
+      : (stateKey === "interlude" && interludeDuration > 0 ? interludeDuration : Infinity);
+
+    const renderAtElapsedTime = () => {
+      const elapsed = Math.max(0, performance.now() - startedAt);
+      const finished = elapsed >= finishAt;
+      let index;
+      if (isOneShotPreview(stateKey)) {
+        index = Math.min(Math.floor(elapsed / dur), urls.length - 1);
+      } else {
+        const sampledElapsed = finished ? Math.max(0, finishAt - 1) : elapsed;
+        index = Math.floor(sampledElapsed / dur) % urls.length;
+      }
+      img.src = urls[index];
+      if (finished) { animTimers[stateKey] = null; return; }
+
+      const nextFrameAt = (Math.floor(elapsed / dur) + 1) * dur;
+      const nextWakeAt = Math.min(nextFrameAt, finishAt);
+      const delay = Math.max(0, nextWakeAt - (performance.now() - startedAt));
+      animTimers[stateKey] = setTimeout(renderAtElapsedTime, delay);
+    };
+    renderAtElapsedTime();
   }
 }
 
@@ -918,7 +1025,7 @@ function buildAssetSlot(slotId, label, accept) {
         <button class="clear-x" type="button" title="제거">✕</button></div>`;
       view.querySelector(".clear-x").onclick = () => {
         if (a.url) URL.revokeObjectURL(a.url);
-        delete assets[slotId]; render(); refresh();
+        delete assets[slotId]; render(); refreshAllStatePreviews(); refresh();
       };
     }
   }
@@ -926,7 +1033,7 @@ function buildAssetSlot(slotId, label, accept) {
     const f = input.files[0]; input.value = "";
     if (!f) return;
     assets[slotId] = { slotId, file: f, url: URL.createObjectURL(f), outName: outNameFor(slotId, f) };
-    render(); refresh();
+    render(); refreshAllStatePreviews(); refresh();
   });
   assetRenderers[slotId] = render;
   render();
@@ -1059,6 +1166,7 @@ async function loadTimerContext() {
     skinButtons: {},                         // 스킨 버튼 PNG(올린 것만)
     fontFamily: "monospace",                 // 내장 폰트는 앱에서 monospace 고정(setFontFamily 비-remotable)
     fontColor: cssColor($("fontColor").value, DIGIT_INK),
+    fontFace: null,
   };
   for (const b of BUTTONS) {
     if (assets[b.key]) tctx.skinButtons[b.key] = await createImageBitmap(assets[b.key].file);
@@ -1071,6 +1179,7 @@ async function loadTimerContext() {
       await face.load();
       document.fonts.add(face);
       tctx.fontFamily = fam;
+      tctx.fontFace = face;
     } catch (e) { /* monospace 유지 */ }
   }
   return tctx;
@@ -1193,7 +1302,8 @@ function composeWidgetFrame(ctx, geom, charBmp, tctx, stateKey) {
 
 /**
  * 한 행동(stateKey)을 위젯 합성으로 렌더한다.
- * - 프레임 순서/속도는 skin.json과 동일하게 pingpong 확장 + store[key].dur(ms).
+ * - 프레임 순서/속도는 실제 위젯과 동일하게 pingpong 확장 + 정규화된 frameDurationMs를 사용한다.
+ * - running은 반복, stop/pause/complete는 1회 재생, interlude는 지정된 구간만 재생한다.
  * - 2프레임↑ → 애니메이션 GIF, 1프레임 → 정지 PNG, 0프레임 → null(건너뜀).
  * 반환: { ext:"gif"|"png", blob } | null.
  */
@@ -1215,18 +1325,35 @@ async function buildWidgetMotionAsset(stateKey, tctx) {
   }
 
   const { GIFEncoder, quantize, applyPalette } = await loadGifenc();
-  const frameData = bitmaps.map(bmp => {
+  const baseFrameData = bitmaps.map(bmp => {
     composeWidgetFrame(ctx, geom, bmp, tctx, stateKey);
     return ctx.getImageData(0, 0, geom.W, geom.H).data;
   });
+  const frameDuration = normalizedFrameDurationMs(st.dur, 200);
+  let frameData = baseFrameData;
+  let frameDelays = baseFrameData.map(() => frameDuration);
+  if (stateKey === "interlude") {
+    const totalDuration = interludePreviewDurationMs();
+    if (totalDuration > 0) {
+      frameData = [];
+      frameDelays = [];
+      for (let elapsed = 0, i = 0; elapsed < totalDuration; i++) {
+        frameData.push(baseFrameData[i % baseFrameData.length]);
+        const delay = Math.min(frameDuration, totalDuration - elapsed);
+        frameDelays.push(delay);
+        elapsed += delay;
+      }
+    }
+  }
   // 전 프레임 공통 팔레트(플리커 방지·용량 절감). 불투명이라 rgb565로 양자화.
-  const merged = new Uint8Array(frameData.reduce((n, d) => n + d.length, 0));
-  { let off = 0; for (const d of frameData) { merged.set(d, off); off += d.length; } }
+  const merged = new Uint8Array(baseFrameData.reduce((n, d) => n + d.length, 0));
+  { let off = 0; for (const d of baseFrameData) { merged.set(d, off); off += d.length; } }
   const palette = quantize(merged, 256, { format: "rgb565" });
   const enc = GIFEncoder();
   frameData.forEach((data, i) => {
     const index = applyPalette(data, palette, "rgb565");
-    enc.writeFrame(index, geom.W, geom.H, { palette, delay: st.dur, repeat: i === 0 ? 0 : undefined });
+    const repeat = i === 0 ? (stateKey === "running" ? 0 : -1) : undefined;
+    enc.writeFrame(index, geom.W, geom.H, { palette, delay: frameDelays[i], repeat });
   });
   enc.finish();
   return { ext: "gif", blob: new Blob([enc.bytesView()], { type: "image/gif" }) };
@@ -1266,7 +1393,7 @@ function buildSkinJson() {
     );
     return {
       frames: names,
-      frameDurationMs: store[stateKey].dur,
+      frameDurationMs: normalizedFrameDurationMs(store[stateKey].dur),
     };
   }
 
@@ -1685,7 +1812,7 @@ async function loadFrameSetInto(zip, prefix, stateKey, frameSet) {
     const file = await fileFromZip(zip, prefix, nm);
     if (file) store[stateKey].frames.push({ id: ++frameSeq, file, url: URL.createObjectURL(file) });
   }
-  store[stateKey].dur = frameSet.frameDurationMs || store[stateKey].dur;
+  store[stateKey].dur = normalizedFrameDurationMs(frameSet.frameDurationMs, store[stateKey].dur);
   store[stateKey].pingpong = pingpong;
   const di = document.querySelector(`[data-dur="${stateKey}"]`); if (di) di.value = store[stateKey].dur;
   const pi = document.querySelector(`[data-pingpong="${stateKey}"]`); if (pi) pi.checked = pingpong;
@@ -2669,8 +2796,12 @@ $("createdAt").value = nowLocalDateTime();
 
 ["skinId", "name", "nameEn", "price", "prestige", "hidden", "saleEnd", "description", "descriptionEn", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
   const el = $(id);
-  el.addEventListener("input", refresh);
-  el.addEventListener("change", refresh);
+  const update = () => {
+    if (id === "buttonStyle" || id === "fontColor" || id === "fontFamily") refreshAllStatePreviews();
+    refresh();
+  };
+  el.addEventListener("input", update);
+  el.addEventListener("change", update);
 });
 ["giftTargetType", "giftTargetSkinId", "giftLabel", "lifetimePassCodes", "lifetimePassExpiresAt", "lifetimePassGenerateCount", "lifetimePassUsageLimit"].forEach(id => {
   const el = $(id);
