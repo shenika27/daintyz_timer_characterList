@@ -452,14 +452,19 @@
         <details class="opt">
           <summary>숫자 폰트 (선택)</summary>
           <div class="body grid">
-            <p class="sub" style="margin:0">숫자 크기는 항상 시간 영역에 맞춰집니다(sizeSp는 적용되지 않음). .ttf를 올리면 그 폰트로, 없으면 내장 monospace로 렌더링합니다.<br>색만 바꾸려면 폰트는 비우고 색만 지정하세요.</p>
+            <p class="sub" style="margin:0">숫자 크기는 <b>자동</b>이면 시간 영역에 맞춰지고, <b>수동</b>이면 자동 크기 대비 20~100%로 줄여 영역 중앙에 렌더됩니다. .ttf를 올리면 그 폰트로, 없으면 내장 monospace로 렌더링합니다.<br>색만 바꾸려면 폰트는 비우고 색만 지정하세요.</p>
             <div id="asset_font"></div>
             <div class="grid two">
               <label class="field"><span>숫자 색 (#RRGGBB, 선택)</span>
                 <input type="text" id="fontColor" placeholder="#FFFFFF" autocomplete="off"></label>
-              <label class="field"><span>크기 sizeSp (미사용 — 영역 자동 맞춤)</span>
-                <input type="number" id="fontSize" placeholder="자동" min="1" step="1" disabled></label>
+              <label class="field"><span>숫자 크기</span>
+                <select id="fontMode">
+                  <option value="auto">자동 (영역에 맞춤)</option>
+                  <option value="manual">수동 (자동 크기 대비 %)</option>
+                </select></label>
             </div>
+            <label class="field" id="fontSizeField"><span>자동 크기 대비 (20~100%)</span>
+              <input type="number" id="fontSize" placeholder="100" min="20" max="100" step="1" disabled></label>
             <label class="field"><span>내장 패밀리 (선택, .ttf 없을 때만)</span>
               <select id="fontFamily">
                 <option value="">(지정 안 함 — monospace 기본)</option>
@@ -1226,6 +1231,14 @@ function cssColor(c, fallback) {
   return fallback;
 }
 
+// 숫자 크기 모드→스케일. 자동(또는 잘못된 값)이면 1, 수동이면 자동 대비 비율(0.2~1). 앱 fillScale와 동일 규칙.
+function fontFillScale() {
+  if ($("fontMode").value !== "manual") return 1;
+  const n = parseInt($("fontSize").value.trim(), 10);
+  if (!Number.isInteger(n)) return 1;
+  return Math.min(100, Math.max(20, n)) / 100;
+}
+
 // 타이머 합성에 필요한 공용 리소스(배경·버튼·폰트)를 번들당 한 번만 준비.
 let _timerFontSeq = 0;
 async function loadTimerContext() {
@@ -1237,6 +1250,7 @@ async function loadTimerContext() {
     fontFamily: "monospace",                 // 내장 폰트는 앱에서 monospace 고정(setFontFamily 비-remotable)
     fontColor: cssColor($("fontColor").value, DIGIT_INK),
     fontFace: null,
+    fontFill: fontFillScale(),               // 자동=1, 수동=자동 대비 비율(0.2~1). 앱 renderTimeBitmap fillScale와 동일 규칙
   };
   for (const b of BUTTONS) {
     if (assets[b.key]) tctx.skinButtons[b.key] = await createImageBitmap(assets[b.key].file);
@@ -1279,7 +1293,7 @@ function roundRectPath(ctx, x, y, w, h, r) {
 //  - 높이: 폰트 메트릭(fontBoundingBox asc+desc) 고정값(글자 조합 무관).
 // 과거엔 measureText(text).width(advance) + actualBoundingBox(잉크 높이)로 잡아 앱(잉크 폭·높이)과 비율이
 // 달라 미리보기 숫자만 굵기가 어긋났다. bold도 붙이지 않는다(faux-bold 방지).
-function drawDigits(ctx, text, rect, family, color) {
+function drawDigits(ctx, text, rect, family, color, fill = 1) {
   const px = 120;
   ctx.save();
   ctx.font = `${px}px ${family}`;
@@ -1299,6 +1313,8 @@ function drawDigits(ctx, text, rect, family, color) {
   const fit = fitRect(bw, bh, rect.x, rect.y, rect.w, rect.h, false);
   ctx.translate(fit.x, fit.y);
   ctx.scale(fit.w / bw, fit.h / bh);
+  // 수동 크기: 비트맵(bw,bh) 중심 기준으로 숫자만 축소 → 앱 renderTimeBitmap의 canvas.scale(중심 피벗)과 동일.
+  if (fill < 1) { ctx.translate(bw / 2, bh / 2); ctx.scale(fill, fill); ctx.translate(-bw / 2, -bh / 2); }
   ctx.fillStyle = color;
   ctx.textAlign = "center";
   const baseline = padY + asc;
@@ -1344,7 +1360,7 @@ function drawTimerBar(ctx, box, tctx, stateKey) {
   for (const [k, wt] of Object.entries(TIMER_COLS)) { const w = box.w * wt / 100; col[k] = { x, w }; x += w; }
   drawButton(ctx, spec.left,  { x: col.btnL.x, y: box.y, w: col.btnL.w, h: box.h }, tctx);
   drawButton(ctx, spec.right, { x: col.btnR.x, y: box.y, w: col.btnR.w, h: box.h }, tctx);
-  drawDigits(ctx, spec.digits, { x: col.time.x, y: box.y, w: col.time.w, h: box.h }, tctx.fontFamily, tctx.fontColor);
+  drawDigits(ctx, spec.digits, { x: col.time.x, y: box.y, w: col.time.w, h: box.h }, tctx.fontFamily, tctx.fontColor, tctx.fontFill ?? 1);
 }
 
 // 위젯 형태 기하(top 고정): 위=타이머 30% / 아래=캐릭터 70%. 캐릭터 프레임 크기 기준으로 산출.
@@ -1523,13 +1539,23 @@ function buildSkinJson() {
     const font = {};
     if (assets.font) font.file = assets.font.outName;
     const fc = $("fontColor").value.trim();
+    const fmode = $("fontMode").value;         // auto | manual
     const fs = $("fontSize").value.trim();
     const ff = $("fontFamily").value;
     if (fc) {
       if (!/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(fc)) errors.push("숫자 색은 #RRGGBB 또는 #AARRGGBB 형식이어야 합니다.");
       else font.color = fc;
     }
-    if (fs) font.sizeSp = parseFloat(fs);
+    // 수동일 때만 sizePercent 저장. 정수 여부·범위(20~100)를 직접 검증(parseInt 절단 금지: 50.5는 오류).
+    if (fmode === "manual") {
+      if (!fs) errors.push("숫자 크기가 '수동'이면 자동 크기 대비 비율(20~100)을 입력하세요.");
+      else if (!/^\d+$/.test(fs)) errors.push("숫자 크기 비율은 정수여야 합니다(예: 60).");
+      else {
+        const n = parseInt(fs, 10);
+        if (n < 20 || n > 100) errors.push("숫자 크기 비율은 20~100 사이여야 합니다.");
+        else if (n !== 100) font.sizePercent = n; // 100은 자동과 동일하므로 필드 생략
+      }
+    }
     if (ff && !assets.font) font.family = ff;
     if (Object.keys(font).length) timer.font = font;
 
@@ -1974,7 +2000,15 @@ async function loadSkinForEdit(entry) {
       if (f) assets.font = { slotId: "font", file: f, url: URL.createObjectURL(f), outName: font.file };
     }
     $("fontColor").value = font.color || "";
-    $("fontSize").value = (font.sizeSp != null) ? font.sizeSp : "";
+    // sizePercent가 유효 정수면 수동, 아니면 자동. (레거시 sizeSp는 무시 → 자동.) 입력 활성상태는 syncFontMode로 갱신.
+    if (Number.isInteger(font.sizePercent)) {
+      $("fontMode").value = "manual";
+      $("fontSize").value = font.sizePercent;
+    } else {
+      $("fontMode").value = "auto";
+      $("fontSize").value = "";
+    }
+    syncFontMode();
     $("fontFamily").value = font.family || "";
 
     // 5) 목록 썸네일 + 이미지 상세 미리보기. 행동별 미리보기는 로드한 상태 프레임으로 다시 생성된다.
@@ -2871,10 +2905,23 @@ function nowLocalDateTime() {
 // 출시일시는 직접입력 불가 — 생성(=빌더 사용) 시각으로 자동. 편집 로드 시엔 원본 createdAt으로 덮어쓴다.
 $("createdAt").value = nowLocalDateTime();
 
-["skinId", "name", "nameEn", "price", "prestige", "hidden", "saleEnd", "description", "descriptionEn", "buttonStyle", "fontColor", "fontSize", "fontFamily"].forEach(id => {
+// 숫자 크기 모드에 따라 비율 입력 활성/비활성. 자동으로 전환하면 값을 비우고, 수동 최초 전환 시 기본 100을 채운다.
+function syncFontMode() {
+  const manual = $("fontMode").value === "manual";
+  const input = $("fontSize");
+  input.disabled = !manual;
+  $("fontSizeField").style.opacity = manual ? "1" : ".5";
+  if (!manual) input.value = "";
+  else if (!input.value.trim()) input.value = "100";
+}
+syncFontMode();
+
+["skinId", "name", "nameEn", "price", "prestige", "hidden", "saleEnd", "description", "descriptionEn", "buttonStyle", "fontColor", "fontMode", "fontSize", "fontFamily"].forEach(id => {
   const el = $(id);
   const update = () => {
-    if (id === "buttonStyle" || id === "fontColor" || id === "fontFamily") refreshAllStatePreviews();
+    if (id === "fontMode") syncFontMode(); // 활성상태·기본값 먼저 반영
+    // 숫자 렌더에 영향(색·모드·비율·패밀리)이면 모든 상태 미리보기를 다시 그린다.
+    if (id === "buttonStyle" || id === "fontColor" || id === "fontFamily" || id === "fontMode" || id === "fontSize") refreshAllStatePreviews();
     refresh();
   };
   el.addEventListener("input", update);
