@@ -119,6 +119,11 @@
       "skinId": "spc22",
       "productId": "skin_spc22",
       "retiredAt": "2026-09-21"
+    },
+    {
+      "skinId": "spc23",
+      "productId": "skin_spc23",
+      "retiredAt": "2026-09-21"
     }
   ]
 }
