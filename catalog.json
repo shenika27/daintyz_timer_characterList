@@ -121,6 +121,23 @@
       "createdAt": "2026-09-11T23:32:00",
       "version": 1,
       "assetVersion": 1
+    },
+    {
+      "skinId": "spc21",
+      "name": "토스터기 식빵씨",
+      "price": 800,
+      "prestige": false,
+      "productId": "skin_spc21",
+      "description": "노릇노릇 구워지는 식빵씨",
+      "localized": {
+        "en": {
+          "name": "Sikpan.c from the Toaster",
+          "description": "Sikpan.c toasting to a golden brown"
+        }
+      },
+      "createdAt": "2026-09-11T23:32:00",
+      "version": 1,
+      "assetVersion": 1
     }
   ]
 }
