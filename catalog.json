@@ -104,7 +104,9 @@
       },
       "createdAt": "2026-09-11T23:32:00",
       "version": 3,
-      "assetVersion": 3
+      "assetVersion": 3,
+      "hidden": true,
+      "archived": true
     },
     {
       "skinId": "spc20",
