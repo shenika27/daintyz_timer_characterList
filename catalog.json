@@ -126,15 +126,6 @@
       "assetVersion": 1
     },
     {
-      "skinId": "mll1",
-      "name": "test",
-      "price": 0,
-      "prestige": false,
-      "createdAt": "2026-10-13T11:40:50",
-      "version": 1,
-      "assetVersion": 1
-    },
-    {
       "skinId": "mll2",
       "name": "test2",
       "price": 0,
